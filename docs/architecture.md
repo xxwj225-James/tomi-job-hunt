@@ -1,0 +1,62 @@
+# Architecture
+
+## Overview
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                 Chrome / Edge browser extension           │
+│  (Boss直聘 / 猎聘 DOM extraction · list highlighting ·    │
+│   one-click fill into chat box)                           │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ Localhost HTTP / WebSocket
+                              ▼
+┌───────────────────────────────────────────────────────────┐
+│                Local Core CLI (based on Claude Code)      │
+│  ┌───────────────┐   ┌───────────────┐   ┌──────────────┐ │
+│  │ Resume/pref   │   │ Match scoring │   │ Pitch/CV     │ │
+│  │ parsing       │   │ engine        │   │ generation   │ │
+│  └───────────────┘   └───────────────┘   └──────────────┘ │
+│                             │                             │
+│   User local data (Markdown/JSON) + LLM (Claude/DeepSeek) │
+└───────────────────────────────────────────────────────────┘
+```
+
+## Core service internals
+
+```
+src/
+├── index.ts          entry: config → logger → HTTP + WS → graceful shutdown
+├── types.ts          shared types (ChatMessage, LLMConfig, WsEvent, ...)
+├── config.ts         loads ~/.tomi-job-hunt/config.json, env overrides
+├── logger.ts         leveled logger with per-job prefixes
+├── queue.ts          concurrency-limited task queue (LLM calls)
+├── http/server.ts    Hono app: GET /health, POST /v1/chat (127.0.0.1 only)
+├── ws/server.ts      WebSocket /ws: job lifecycle events broadcast
+└── llm/
+    ├── chat-provider.ts   ChatProvider interface + ChatProviderError
+    ├── factory.ts         createChatProvider(config) dispatch
+    ├── claude-code.ts     Claude Code agent-sdk (queryStream)
+    ├── claude-api.ts      Anthropic Messages API (@anthropic-ai/sdk)
+    └── openai-compat.ts   stub for DeepSeek/Qwen (OpenAI-compatible, Phase 2)
+```
+
+## Data flow
+
+1. Extension extracts a JD from the job page into structured JSON.
+2. Extension POSTs to `POST /v1/chat` (or a Phase 1+ domain endpoint).
+3. Core enqueues the request (queue, concurrency-limited) and broadcasts
+   `job/queued` over `/ws`.
+4. The configured `ChatProvider` streams chunks back; the queue broadcasts
+   `job/started` / `job/done` / `job/error`.
+5. Extension renders the result and fills it into the page.
+
+## Design decisions
+
+- **All LLM calls go through `ChatProvider`** so adding DeepSeek/Qwen is a
+  new provider class, not a core change.
+- **Concurrency-limited queue**: each `claude-code` call spawns a Claude Code
+  CLI subprocess (~1-2 s cold start on Windows), so the default limit is 2.
+- **Headless mode**: `claude-code` runs with `permissionMode:
+  "bypassPermissions"` because the service has no interactive terminal.
+- **Local-only binding**: the server binds `127.0.0.1` and never listens on
+  external interfaces. The extension is the only intended client.

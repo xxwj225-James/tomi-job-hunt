@@ -1,0 +1,17 @@
+{
+  "name": "tomi-job-hunt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI job-hunting assistant: local-first JD matching, resume tailoring and pitch generation for the Chinese job market",
+  "license": "MIT",
+  "workspaces": [
+    "core"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w core",
+    "test": "npm test -w core"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
