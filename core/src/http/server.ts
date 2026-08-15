@@ -28,6 +28,7 @@ import {
 } from '../jd/schema.js';
 import { tagJdWithRetry } from '../jd/tagger.js';
 import { sanitizeReportNote } from '../jd/sanitize.js';
+import { greetJd, loadResume } from '../jd/greeting.js';
 import type { JdStore } from '../jd/store.js';
 
 const chatRequestSchema = z.object({
@@ -50,7 +51,20 @@ export interface RouteDeps {
   log: Logger;
   ws: WsHub;
   store: JdStore;
+  /** Config dir (~/.tomi-job-hunt) — resume.md is loaded from here. */
+  configDir: string;
 }
+
+const greetingRequestSchema = z.object({
+  jd: z.object({
+    title: z.string().min(1),
+    company: z.string().min(1),
+    salaryText: z.string().default(''),
+    requirements: z.string().default(''),
+    hrName: z.string().optional(),
+  }),
+  resume: z.string().optional(),
+});
 
 export function registerRoutes(app: Hono, deps: RouteDeps): void {
   // Permissive CORS: the service binds 127.0.0.1 only, and MV3 extensions
@@ -198,5 +212,34 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     });
     deps.log.info(`jd: report ${report.type} added to ${jobUid}`);
     return c.json(report, 201);
+  });
+
+  // --- Greeting pitch generation ---
+
+  app.post('/v1/greeting', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = greetingRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume } = parsed.data;
+    // Prefer the local resume.md unless the caller passed an explicit resume.
+    const effectiveResume = resume ?? loadResume(deps.configDir);
+    const jobId = randomUUID();
+    deps.ws.broadcast({ type: 'job/queued', jobId });
+    try {
+      const result = await deps.queue.run(async () => {
+        deps.ws.broadcast({ type: 'job/started', jobId });
+        return await greetJd(deps.provider, jd, effectiveResume, deps.log.child(`greet:${jobId.slice(0, 8)}`));
+      });
+      deps.ws.broadcast({ type: 'job/done', jobId, result });
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      deps.ws.broadcast({ type: 'job/error', jobId, message });
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message, jobId }, status);
+    }
   });
 }

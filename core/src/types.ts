@@ -76,7 +76,7 @@ export interface ChatProvider {
 export type WsEvent =
   | { type: 'job/queued'; jobId: string }
   | { type: 'job/started'; jobId: string }
-  | { type: 'job/done'; jobId: string; result: ChatResult }
+  | { type: 'job/done'; jobId: string; result: unknown }
   | { type: 'job/error'; jobId: string; message: string }
   /** Async JD tagging finished (or failed — tags null, error set). */
   | {

@@ -31,7 +31,7 @@ async function main(): Promise<void> {
 
   const app = new Hono();
   const ws = createWsHub(app, log.child('ws'));
-  registerRoutes(app, { provider, queue, log, ws, store });
+  registerRoutes(app, { provider, queue, log, ws, store, configDir: cfg.configDir });
 
   const server = serve(
     {

@@ -1,0 +1,22 @@
+{
+  "name": "@tomi/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TomiHunt Chrome/Edge MV3 extension: JD extraction, AI panel, one-click fill",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.0",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  }
+}

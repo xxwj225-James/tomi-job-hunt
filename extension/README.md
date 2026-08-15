@@ -1,25 +1,55 @@
-# Browser Extension (Phase 1)
+# Browser Extension (Phase 1 — MVP closed loop)
 
-The Chrome/Edge extension will be built here in **Phase 1** (Manifest V3).
+Chrome/Edge MV3 extension: extracts JDs from Boss直聘 / 猎聘 job detail
+pages, sends them to the local Core service for structured tagging and
+greeting-pitch generation, and fills the pitch into the Boss直聘 chat box.
 
-## Planned scope
-
-- **Single-page JD extraction** on Boss直聘 (`zhipin.com`) and 猎聘
-  (`liepin.com`) job detail pages: title, salary, company, requirements, HR name
-- **"Import to AI" button** sending structured JSON to the local Core service
-  (`http://127.0.0.1:3000`)
-- **One-click fill** of generated greeting messages into the Boss直聘 chat box
-- Phase 3+: list-page filtering/highlighting, quick match-score badges
-
-## Planned structure
+## How it works
 
 ```
-extension/
-├── manifest.json          MV3 manifest (permissions: activeTab, storage)
-├── src/
-│   ├── content/           per-site DOM extraction adapters (zhipin, liepin)
-│   ├── popup/             extension popup UI
-│   └── core-client.ts     HTTP/WS client for the Core service
+job detail page (zhipin/liepin)
+  ├─ extract JD: zhipin = /wapi/zpgeek/job/detail.json (plaintext salary,
+  │   beats the dynamic salary font) with DOM fallback; liepin = DOM after
+  │   AJAX-injected content appears (waitForJd)
+  ├─ POST /v1/jd/capture → Core stores + async LLM tagging (WS jd/tagged)
+  └─ POST /v1/greeting → 100-120 字打招呼语（结合 ~/.tomi-job-hunt/resume.md）
+
+立即沟通 navigates to /web/geek/chat/* (SPA) — the pitch travels there via
+chrome.storage.session, and zhipin-chat.ts fills the chat box, which is a
+contenteditable div (NOT a textarea) in the current site build.
 ```
 
-Nothing in this directory is functional yet.
+## Build & load (Chrome / Edge)
+
+```bash
+npm install          # at repo root
+npm run build -w extension
+```
+
+1. Open `chrome://extensions` (or `edge://extensions`)
+2. Enable **Developer mode**
+3. **Load unpacked** → select `extension/dist/`
+4. Start the Core service: `npm run dev -w core`
+
+## Develop
+
+```bash
+npm run dev -w extension   # vite build --watch (rebuild then reload in chrome://extensions)
+npm test -w extension      # extractor/fill unit tests (jsdom fixtures)
+```
+
+## Site compatibility notes (verified via live research, 2026-08)
+
+- **zhipin anti-obfuscation**: salary digits are rendered with a per-session
+  custom font (DOM text is garbage) — the JSON API path is primary; JD text
+  contains CSS-hidden interference words, stripped by `stripHidden()` in
+  `src/content/shared.ts`.
+- **zhipin chat box**: `contenteditable` div (`#chat-input.chat-input`);
+  filled via textContent + caret + beforeinput/input events. The textarea
+  path (native value setter) is kept as fallback.
+- **liepin**: SSR shell first, detail body injected client-side —
+  `waitForJd()` polls until selectors resolve. Current detail-page class
+  names should be re-verified in DevTools if extraction comes up empty
+  (candidate selectors cover current + legacy layouts).
+- Content scripts auto-run only in the real browser (guarded by
+  `typeof chrome !== 'undefined'`) so unit tests can import extractors.

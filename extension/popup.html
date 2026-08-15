@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TomiHunt</title>
+    <style>
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 16px;
+        font-family: system-ui, 'Microsoft YaHei', sans-serif;
+        font-size: 13px;
+        color: #222;
+      }
+      h1 { font-size: 16px; margin: 0 0 4px; }
+      .sub { color: #888; margin-bottom: 12px; }
+      .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+      .ok { color: #1a7f37; font-weight: 600; }
+      .down { color: #c0392b; font-weight: 600; }
+      .tip { margin-top: 12px; padding: 10px; background: #f6f8ff; border-radius: 8px; line-height: 1.6; }
+      code { background: #eef; padding: 1px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>🤖 TomiHunt</h1>
+    <div class="sub">AI 求职雷达 · 数据不出本机</div>
+    <div id="status">连接中…</div>
+    <div class="tip">
+      在 <b>Boss 直聘</b> / <b>猎聘</b> 岗位详情页，右下角会出现
+      <b>🤖 TomiHunt</b> 浮动按钮：自动导入 JD → AI 结构化标签 →
+      生成打招呼语 → 一键填入聊天框。<br /><br />
+      建议配置本地简历 <code>~/.tomi-job-hunt/resume.md</code>，
+      打招呼语会结合你的真实经历生成。
+    </div>
+    <script type="module" src="/src/popup/popup.ts"></script>
+  </body>
+</html>

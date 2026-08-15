@@ -5,11 +5,12 @@
   "description": "AI job-hunting assistant: local-first JD matching, resume tailoring and pitch generation for the Chinese job market",
   "license": "MIT",
   "workspaces": [
-    "core"
+    "core",
+    "extension"
   ],
   "scripts": {
     "dev": "npm run dev -w core",
-    "test": "npm test -w core"
+    "test": "npm test -w core && npm test -w extension"
   },
   "engines": {
     "node": ">=20"
