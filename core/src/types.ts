@@ -66,7 +66,15 @@ export type WsEvent =
   | { type: 'job/queued'; jobId: string }
   | { type: 'job/started'; jobId: string }
   | { type: 'job/done'; jobId: string; result: ChatResult }
-  | { type: 'job/error'; jobId: string; message: string };
+  | { type: 'job/error'; jobId: string; message: string }
+  /** Async JD tagging finished (or failed — tags null, error set). */
+  | {
+      type: 'jd/tagged';
+      jobId: string;
+      jobUid: string;
+      tags: import('./jd/schema.js').JdTags | null;
+      error?: string;
+    };
 
 export interface JobRequest {
   jobId: string;

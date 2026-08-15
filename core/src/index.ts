@@ -13,6 +13,7 @@ import { TaskQueue } from './queue.js';
 import { createChatProvider } from './llm/factory.js';
 import { createWsHub } from './ws/server.js';
 import { registerRoutes } from './http/server.js';
+import { JdStore } from './jd/store.js';
 
 async function main(): Promise<void> {
   loadDotEnv();
@@ -26,10 +27,11 @@ async function main(): Promise<void> {
 
   const provider = createChatProvider(cfg.llm, log.child('llm'), workDir);
   const queue = new TaskQueue(cfg.llm.concurrency, log.child('queue'));
+  const store = new JdStore(join(cfg.configDir, 'data'), log.child('store'));
 
   const app = new Hono();
   const ws = createWsHub(app, log.child('ws'));
-  registerRoutes(app, { provider, queue, log, ws });
+  registerRoutes(app, { provider, queue, log, ws, store });
 
   const server = serve(
     {

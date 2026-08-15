@@ -2,7 +2,7 @@
   "name": "@tomi/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Tomi-Job-Hunt local Core service: LLM providers, HTTP + WebSocket API",
+  "description": "TomiHunt local Core service: LLM providers, JD store/tagging, HTTP + WebSocket API",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
