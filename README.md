@@ -76,20 +76,31 @@ npm install
 mkdir -p ~/.tomi-job-hunt
 ```
 
-编辑 `~/.tomi-job-hunt/config.json`：
+编辑 `~/.tomi-job-hunt/config.json`，选择任一 LLM 提供商：
+
+| provider | 默认模型 | 说明 |
+|---|---|---|
+| `claude-code` | claude-sonnet-5 | Claude Code SDK（agent 能力最强） |
+| `claude-api` | claude-sonnet-5 | Anthropic Messages API 直连（轻量便宜） |
+| `deepseek` | deepseek-v4-flash | 国内直连，成本最低；可选 deepseek-v4-pro |
+| `kimi` | kimi-k2.6 | 可选 kimi-k2.7-code / kimi-k3 |
+| `qwen` | qwen3.7-plus | 可选 qwen3.8-max（仅思考模式） |
+| `openai-compatible` | 需指定 | 任意 OpenAI 兼容端点（自建网关等） |
 
 ```json
 {
-  "provider": "claude-code",
-  "model": "claude-sonnet-5",
+  "provider": "deepseek",
+  "model": "deepseek-v4-flash",
+  "apiKey": "sk-你的密钥",
   "concurrency": 2
 }
 ```
 
-设置 API Key：
+或用环境变量（Claude 系用 `ANTHROPIC_API_KEY`，国内系用 `TOMI_API_KEY`）：
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export TOMI_PROVIDER=deepseek
+export TOMI_API_KEY=sk-你的密钥
 ```
 
 ### 3. 启动

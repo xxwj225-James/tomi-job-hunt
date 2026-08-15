@@ -50,6 +50,34 @@ describe('loadConfig', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
+  it('resolves presets for deepseek/kimi/qwen', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
+    const deepseek = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'deepseek', TOMI_API_KEY: 'sk-ds' } });
+    expect(deepseek.llm.baseUrl).toBe('https://api.deepseek.com/v1');
+    expect(deepseek.llm.model).toBe('deepseek-v4-flash');
+    expect(deepseek.llm.apiKey).toBe('sk-ds');
+
+    const kimi = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'kimi' } });
+    expect(kimi.llm.baseUrl).toBe('https://api.moonshot.cn/v1');
+    expect(kimi.llm.model).toBe('kimi-k2.6');
+
+    const qwen = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'qwen' } });
+    expect(qwen.llm.baseUrl).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
+    expect(qwen.llm.model).toBe('qwen3.7-plus');
+  });
+
+  it('TOMI_BASE_URL and TOMI_MODEL override presets; thinking from config.json', () => {
+    const home = makeHomeWithConfig({ provider: 'deepseek', thinking: true });
+    const cfg = loadConfig({
+      home,
+      env: { TOMI_BASE_URL: 'http://127.0.0.1:9999/v1', TOMI_MODEL: 'deepseek-v4-pro' },
+    });
+    expect(cfg.llm.baseUrl).toBe('http://127.0.0.1:9999/v1');
+    expect(cfg.llm.model).toBe('deepseek-v4-pro');
+    expect(cfg.llm.thinking).toBe(true);
+    rmSync(home, { recursive: true, force: true });
+  });
+
   it('throws on unknown provider', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
     expect(() => loadConfig({ home: dir, env: { TOMI_PROVIDER: 'nope' } })).toThrow(/Unknown TOMI_PROVIDER/);

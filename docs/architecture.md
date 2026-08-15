@@ -35,9 +35,10 @@ src/
 └── llm/
     ├── chat-provider.ts   ChatProvider interface + ChatProviderError
     ├── factory.ts         createChatProvider(config) dispatch
-    ├── claude-code.ts     Claude Code agent-sdk (queryStream)
+    ├── claude-code.ts     Claude Code agent-sdk (async-generator query)
     ├── claude-api.ts      Anthropic Messages API (@anthropic-ai/sdk)
-    └── openai-compat.ts   stub for DeepSeek/Qwen (OpenAI-compatible, Phase 2)
+    └── openai-compat.ts   DeepSeek / Kimi / Qwen + custom OpenAI-compatible
+                           endpoints (fetch + SSE, zero deps)
 ```
 
 ## Data flow
@@ -52,8 +53,12 @@ src/
 
 ## Design decisions
 
-- **All LLM calls go through `ChatProvider`** so adding DeepSeek/Qwen is a
-  new provider class, not a core change.
+- **All LLM calls go through `ChatProvider`** — adding a new provider is one
+  class + one factory case, not a core change. deepseek/kimi/qwen share the
+  OpenAI-compatible client; provider-specific params are keyed off baseUrl
+  (pattern ported from TomiLite's production integration):
+  DeepSeek v4 `thinking: {type}` toggle, Qwen `enable_thinking` (only when
+  true), Kimi standard params.
 - **Concurrency-limited queue**: each `claude-code` call spawns a Claude Code
   CLI subprocess (~1-2 s cold start on Windows), so the default limit is 2.
 - **Headless mode**: `claude-code` runs with `permissionMode:

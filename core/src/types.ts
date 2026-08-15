@@ -36,19 +36,30 @@ export interface ChatChunk {
   done: boolean;
 }
 
-export type ProviderId = 'claude-code' | 'claude-api' | 'openai-compatible';
+export type ProviderId =
+  | 'claude-code'
+  | 'claude-api'
+  | 'deepseek'
+  | 'kimi'
+  | 'qwen'
+  | 'openai-compatible';
 
 export interface LLMConfig {
   provider: ProviderId;
-  /** e.g. 'claude-sonnet-5' | 'claude-haiku-4-5-20251001' | 'deepseek-chat'. */
+  /** e.g. 'deepseek-v4-flash' | 'kimi-k2.6' | 'qwen3.7-plus' | 'claude-sonnet-5'. */
   model?: string;
   /**
    * API key. For 'claude-code' leave empty — the SDK/CLI reads
    * ANTHROPIC_API_KEY from the environment (or options.env).
    */
   apiKey?: string;
-  /** OpenAI-compatible endpoint base URL (DeepSeek/Qwen, Phase 2+). */
+  /** OpenAI-compatible endpoint base URL. Preset for deepseek/kimi/qwen. */
   baseUrl?: string;
+  /**
+   * Thinking mode (DeepSeek v4 / Qwen3). Default false: cheap, fast,
+   * JSON-friendly (thinking mode ignores temperature).
+   */
+  thinking?: boolean;
   maxTokens?: number;
   temperature?: number;
   /** Max in-flight LLM calls. Each claude-code call spawns a CLI subprocess. */

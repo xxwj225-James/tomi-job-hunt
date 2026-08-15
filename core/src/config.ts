@@ -19,20 +19,43 @@ import type { LLMConfig, ProviderId } from './types.js';
 export const PROVIDER_IDS: readonly ProviderId[] = [
   'claude-code',
   'claude-api',
+  'deepseek',
+  'kimi',
+  'qwen',
   'openai-compatible',
 ];
+
+/** Known OpenAI-compatible endpoints (verified against TomiLite's integration). */
+export const PROVIDER_PRESETS: Record<string, { baseUrl: string; defaultModel?: string }> = {
+  deepseek: { baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-v4-flash' },
+  kimi: { baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2.6' },
+  qwen: { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen3.7-plus' },
+};
 
 const DEFAULT_MODEL_BY_PROVIDER: Record<ProviderId, string | undefined> = {
   'claude-code': 'claude-sonnet-5',
   'claude-api': 'claude-sonnet-5',
-  'openai-compatible': undefined, // must be set explicitly (e.g. 'deepseek-chat')
+  deepseek: PROVIDER_PRESETS.deepseek?.defaultModel,
+  kimi: PROVIDER_PRESETS.kimi?.defaultModel,
+  qwen: PROVIDER_PRESETS.qwen?.defaultModel,
+  'openai-compatible': undefined, // must be set explicitly
 };
 
+const PROVIDER_ENUM = [
+  'claude-code',
+  'claude-api',
+  'deepseek',
+  'kimi',
+  'qwen',
+  'openai-compatible',
+] as const;
+
 const fileConfigSchema = z.object({
-  provider: z.enum(['claude-code', 'claude-api', 'openai-compatible']).optional(),
+  provider: z.enum(PROVIDER_ENUM).optional(),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
+  thinking: z.boolean().optional(),
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
   concurrency: z.number().int().min(1).max(16).optional(),
@@ -98,12 +121,14 @@ export function loadConfig(options?: {
 
   const model = env.TOMI_MODEL ?? file.model ?? DEFAULT_MODEL_BY_PROVIDER[provider];
   const apiKey = env.ANTHROPIC_API_KEY ?? env.TOMI_API_KEY ?? file.apiKey;
+  const baseUrl = env.TOMI_BASE_URL ?? file.baseUrl ?? PROVIDER_PRESETS[provider]?.baseUrl;
 
   const llm: LLMConfig = {
     provider,
     model,
     apiKey,
-    baseUrl: file.baseUrl,
+    baseUrl,
+    thinking: file.thinking,
     maxTokens: file.maxTokens,
     temperature: file.temperature,
     concurrency: intEnv(env.TOMI_CONCURRENCY) ?? file.concurrency ?? 2,

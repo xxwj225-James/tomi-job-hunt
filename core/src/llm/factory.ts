@@ -1,7 +1,7 @@
 /**
- * Provider dispatch. Adding a new LLM (Qwen, local Ollama, ...) means writing
- * one new class implementing ChatProvider and a case here — nothing else in
- * the service changes.
+ * Provider dispatch. Adding a new LLM (local Ollama, ...) means writing one
+ * new class implementing ChatProvider and a case here — nothing else in the
+ * service changes. deepseek/kimi/qwen share the OpenAI-compatible client.
  */
 import type { ChatProvider, LLMConfig } from '../types.js';
 import type { Logger } from '../logger.js';
@@ -19,6 +19,9 @@ export function createChatProvider(cfg: LLMConfig, log: Logger, workDir: string)
       return new ClaudeCodeProvider(cfg, log, workDir);
     case 'claude-api':
       return new ClaudeAPIProvider(cfg, log);
+    case 'deepseek':
+    case 'kimi':
+    case 'qwen':
     case 'openai-compatible':
       return new OpenAICompatProvider(cfg, log);
   }
