@@ -46,8 +46,9 @@ export class ClaudeCodeProvider implements ChatProvider {
         if (isAssistantMessage(event)) {
           accumulated += extractText(event);
         } else if (isResultMessage(event)) {
-          if (event.subtype === 'error' || event.is_error) {
-            throw new ChatProviderError(this.id, `Claude Code run failed: ${event.result || 'unknown error'}`);
+          // Narrow to the success variant; error variants carry no result text.
+          if (event.subtype !== 'success' || event.is_error) {
+            throw new ChatProviderError(this.id, `Claude Code run failed (${event.subtype})`);
           }
           // The result carries the definitive final text; accumulated covers streamed turns.
           finalText = event.result;
@@ -75,8 +76,9 @@ export class ClaudeCodeProvider implements ChatProvider {
             yield { text, done: false };
           }
         } else if (isResultMessage(event)) {
-          if (event.subtype === 'error' || event.is_error) {
-            throw new ChatProviderError(this.id, `Claude Code run failed: ${event.result || 'unknown error'}`);
+          // Narrow to the success variant; error variants carry no result text.
+          if (event.subtype !== 'success' || event.is_error) {
+            throw new ChatProviderError(this.id, `Claude Code run failed (${event.subtype})`);
           }
           if (!emitted && event.result) {
             yield { text: event.result, done: false };
@@ -149,8 +151,8 @@ function extractText(event: SDKAssistantMessage): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
-    .filter((block): block is { type: 'text'; text: string } => block?.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text)
+    .filter((block) => block?.type === 'text')
+    .map((block) => (block as { text?: string }).text ?? '')
     .join('');
 }
 

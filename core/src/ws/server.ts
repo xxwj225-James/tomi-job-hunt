@@ -5,6 +5,7 @@
 import { createNodeWebSocket } from '@hono/node-ws';
 import type { Hono } from 'hono';
 import type { WSContext } from 'hono/ws';
+import type { WebSocket } from 'ws';
 import type { WsEvent } from '../types.js';
 import type { Logger } from '../logger.js';
 

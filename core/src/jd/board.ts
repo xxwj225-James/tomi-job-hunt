@@ -39,22 +39,22 @@ const HEADER = `# TomiHunt 求职看板
 `;
 
 export class Board {
-  private readonly path: string;
+  private readonly filePath: string;
 
   constructor(
     private readonly configDir: string,
     private readonly log: Logger,
   ) {
     mkdirSync(configDir, { recursive: true });
-    this.path = join(configDir, 'board.md');
-    if (!existsSync(this.path)) writeFileSync(this.path, HEADER, 'utf8');
+    this.filePath = join(configDir, 'board.md');
+    if (!existsSync(this.filePath)) writeFileSync(this.filePath, HEADER, 'utf8');
   }
 
   add(entry: Omit<BoardEntry, 'ts'>): BoardEntry {
     const stored: BoardEntry = { ...entry, ts: new Date().toISOString() };
     const line = `| ${stored.ts.slice(0, 10)} | ${escapePipe(stored.company)} | ${escapePipe(stored.title)} | ${stored.url} | ${escapePipe(stored.note ?? '')} |\n`;
     // Insert under the matching status section (sections are in BOARD_STATUSES order)
-    let content = readFileSync(this.path, 'utf8');
+    let content = readFileSync(this.filePath, 'utf8');
     const heading = `## ${STATUS_LABELS[stored.status]}`;
     const idx = content.indexOf(heading);
     if (idx < 0) {
@@ -63,13 +63,13 @@ export class Board {
       const lineEnd = content.indexOf('\n', idx) + 1;
       content = `${content.slice(0, lineEnd)}${line}${content.slice(lineEnd)}`;
     }
-    writeFileSync(this.path, content, 'utf8');
+    writeFileSync(this.filePath, content, 'utf8');
     this.log.info(`board: ${stored.status} ${stored.company} — ${stored.title}`);
     return stored;
   }
 
   list(): BoardEntry[] {
-    const content = readFileSync(this.path, 'utf8');
+    const content = readFileSync(this.filePath, 'utf8');
     const entries: BoardEntry[] = [];
     let current: BoardStatus | null = null;
     for (const line of content.split('\n')) {
@@ -95,7 +95,7 @@ export class Board {
   }
 
   get path(): string {
-    return this.path;
+    return this.filePath;
   }
 }
 

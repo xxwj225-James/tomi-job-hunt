@@ -8,8 +8,8 @@
  *    against the local resume via /v1/match → score badge on the card
  *    (lazy + cost-controlled: only cards the user asks about)
  */
-import { client, CORE_BASE, pickText } from '../core-client.js';
-import { pickLongText, showPanel } from './shared.js';
+import { CORE_BASE } from '../core-client.js';
+import { client, showPanel } from './shared.js';
 import type { JdCaptureInput } from '../types.js';
 
 const RISK_KEYWORDS = ['外包', '驻场', '人力外包', '劳务派遣', '单休', '大小周', '试用期不交社保', '996'];
@@ -26,12 +26,18 @@ export interface ListCard {
 
 /** Extracts a lightweight JD summary from a list card (no full JD available). */
 export function extractCard(card: Element): ListCard | null {
-  const title = pickText(card.ownerDocument, []) || card.querySelector('.job-name')?.textContent?.trim() || '';
+  const title = card.querySelector('.job-name')?.textContent?.trim() || '';
   const company = card.querySelector('.company-name')?.textContent?.trim() || '';
   if (!title && !company) return null;
   const salaryText = card.querySelector('.salary')?.textContent?.trim() || '';
-  const brief =
-    pickLongText(card.ownerDocument, ['.tag-list', '.job-card-footer', '.job-card-body .info-desc']) || '';
+  // Longest text block inside THIS card (tags / footer / description)
+  let brief = '';
+  for (const sel of ['.tag-list', '.job-card-footer', '.job-card-body .info-desc']) {
+    for (const el of card.querySelectorAll(sel)) {
+      const text = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (text.length > brief.length) brief = text;
+    }
+  }
   return { el: card, title, company, salaryText, brief };
 }
 

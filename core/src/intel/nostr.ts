@@ -11,6 +11,7 @@
  */
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { SimplePool } from 'nostr-tools/pool';
+import type { Filter } from 'nostr-tools/filter';
 import type { SharedIntel } from '../jd/schema.js';
 import type { Logger } from '../logger.js';
 
@@ -18,6 +19,20 @@ export const INTEL_KIND = 30078;
 export const INTEL_TAG = 'tomihunt-intel';
 
 const DEFAULT_RELAYS = ['wss://relay.damus.io', 'wss://nos.lol'];
+
+/** nostr-tools v2 uses Uint8Array secret keys internally; config stores hex. */
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export interface NostrConfig {
   relays: string[];
@@ -32,7 +47,8 @@ export async function publishIntel(
 ): Promise<string> {
   const privateKey = cfg.privateKey;
   if (!privateKey) throw new Error('intel.nostr.privateKey is not configured (hex nsec). Use a DEDICATED key.');
-  const pubkey = getPublicKey(privateKey);
+  const secretKey = hexToBytes(privateKey);
+  const pubkey = getPublicKey(secretKey);
   const event = finalizeEvent(
     {
       kind: INTEL_KIND,
@@ -44,7 +60,7 @@ export async function publishIntel(
       ],
       content: JSON.stringify(entry),
     },
-    privateKey,
+    secretKey,
   );
 
   const relays = cfg.relays.length > 0 ? cfg.relays : DEFAULT_RELAYS;
@@ -71,7 +87,7 @@ export async function subscribeIntel(
   try {
     const sub = pool.subscribeMany(
       relays,
-      [{ kinds: [INTEL_KIND], '#t': [INTEL_TAG], limit: 50 }],
+      { kinds: [INTEL_KIND], '#t': [INTEL_TAG], limit: 50 } as Filter,
       {
         onevent: (event) => {
           try {
@@ -95,8 +111,8 @@ export async function subscribeIntel(
   return received;
 }
 
-/** Generates a fresh dedicated keypair for intel sharing. */
+/** Generates a fresh dedicated keypair for intel sharing (hex strings). */
 export function generateIntelKey(): { privateKey: string; publicKey: string } {
-  const privateKey = generateSecretKey();
-  return { privateKey, publicKey: getPublicKey(privateKey) };
+  const secretKey = generateSecretKey();
+  return { privateKey: bytesToHex(secretKey), publicKey: getPublicKey(secretKey) };
 }
