@@ -40,14 +40,17 @@ export function buildIntentPrompt(query: string): string {
 
 只输出 JSON：
 {
-  "techStack": ["java"],                 // 技术栈/技能关键词（小写英文）
+  "techStack": ["java"],                 // 只放具体技术/工具/框架关键词（小写英文，如 java、rag、kubernetes、llm）
   "workHours": "双休 | 大小周 | 单休 | 弹性 | 未标注",   // 未提及则不输出该字段
   "degreeReq": "不限 | 大专 | 本科 | 硕士 | 博士",      // 未提及则不输出
   "yearsReq": "应届 | 1-3 | 3-5 | 5-10 | 10+ | 不限",  // 未提及则不输出
   "excludeRisks": ["outsourcing"],       // 用户要避开的风险（外包→outsourcing、单休→single_day_off、试用期不交社保→no_social_insurance、无偿加班→unpaid_ot）；没有则 []
   "remoteOnly": true/false               // 明确要远程才为 true
 }
-规则："不加班/双休" → workHours: "双休"；"学历要求不严/不限学历" → degreeReq: "不限"；"外包不要/拒绝外包" → excludeRisks 加 outsourcing。不推测语句里没有的约束。`;
+规则：
+- "不加班/双休" → workHours: "双休"；"学历要求不严/不限学历" → degreeReq: "不限"；"外包不要/拒绝外包" → excludeRisks 加 outsourcing
+- 岗位角色词（后端、前端、工程师、开发、算法等）**不要**放进 techStack——只放具体技术词；语句里没有具体技术词就留空数组
+- 不推测语句里没有的约束`;
 }
 
 export function parseIntent(text: string): SearchIntent {

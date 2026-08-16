@@ -308,7 +308,12 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
         scoreJd(deps.provider, jd, effectiveResume, deps.log.child('match')),
       );
       deps.log.info(`match: score=${result.score} verdict=${result.verdict} (${jd.company} — ${jd.title})`);
-      return c.json(result);
+      return c.json({
+        ...result,
+        warning: effectiveResume
+          ? undefined
+          : '未配置 resume.md（~/.tomi-job-hunt/resume.md），评分为 JD 通用画像参考，仅供参考',
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const status = err instanceof ChatProviderError ? 502 : 500;

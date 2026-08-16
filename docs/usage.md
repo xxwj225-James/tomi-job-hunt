@@ -157,7 +157,15 @@ npm run build -w extension
 | `GET /v1/jd/search?tags=java&workHours=双休` | 标签粗筛 |
 | `GET /v1/jd/:jobUid` | 单条记录 + 社区报告 |
 | `POST /v1/jd/:jobUid/report` | 提交结构化岗位报告（本地存储，自动脱敏） |
+| `POST /v1/jd/semantic-search` | 自然语言语义搜索（`{"query":"不用加班、懂 RAG 的后端"}`） |
+| `POST /v1/match` | 匹配度打分 0-100 + 优势/短板/避坑诊断 |
 | `POST /v1/greeting` | 生成打招呼语（自动读取 resume.md） |
+| `POST /v1/interview-prep` | 预测 5-10 道面试题 + STAR 建议 |
+| `POST /v1/resume/tailor` | 按 JD 定制简历（Markdown） |
+| `POST /v1/resume/export` | 导出定制简历（`format: md / doc`，Word 可直接打开 .doc） |
+| `GET/POST /v1/board` | 求职看板（本地 Kanban：已打招呼→已投递→面试→Offer） |
+| `POST /v1/hunt/companies` | 技能 → 目标公司清单（含直连渠道建议） |
+| `POST /v1/hunt/cold-email` | 生成直连自荐冷邮件 |
 | `WS /ws` | 任务生命周期事件（queued → started → done / error / jd/tagged） |
 
 示例：
@@ -168,11 +176,45 @@ curl -X POST http://127.0.0.1:3000/v1/jd/capture \
   -H "Content-Type: application/json" \
   -d '{"source":"manual","url":"https://example.com/job/1","title":"高级后端工程师","company":"某某科技","salaryText":"20-30K·14薪","requirements":"熟悉 Java、K8s，3-5 年经验，本科以上"}'
 
-# 生成打招呼语
-curl -X POST http://127.0.0.1:3000/v1/greeting \
+# 语义搜索本地 JD 库
+curl -X POST http://127.0.0.1:3000/v1/jd/semantic-search \
   -H "Content-Type: application/json" \
-  -d '{"jd":{"title":"高级后端工程师","company":"某某科技","salaryText":"20-30K·14薪","requirements":"熟悉 Java、K8s"}}'
+  -d '{"query":"找一个不用加班、深入懂 RAG 但对学历要求不严的后端岗位"}'
+
+# 匹配度打分
+curl -X POST http://127.0.0.1:3000/v1/match \
+  -H "Content-Type: application/json" \
+  -d '{"jd":{"title":"高级后端工程师","company":"某某科技","salaryText":"20-30K","requirements":"熟悉 Java、K8s"}}'
 ```
+
+## 进阶功能
+
+### 隐形岗位日报（Job Watchdog）
+
+聚合非传统招聘渠道（Hacker News Who-is-hiring / V2EX 酷工作 / GitHub 招聘仓库），AI 抽取结构化岗位，生成 Markdown 日报 + Windows 桌面通知：
+
+```bash
+npm run watch -w core
+# 日报写入 ~/.tomi-job-hunt/digest/YYYY-MM-DD.md
+# 已看过的帖子自动去重（watchdog-state.json）
+```
+
+> 适合配合系统计划任务（Windows 任务计划程序 / cron）每日定时执行。
+
+### 去中心化情报网（Intel Network）
+
+匿名共享结构化求职情报（真实薪资、外包真相、HR 刷 KPI），零注册、零服务器：
+
+```bash
+npm run intel -w core export      # 把本地脱敏情报合并到 data/intel-feed.json
+npm run intel -w core keygen      # 生成专用 Nostr 密钥对（仅用于情报共享）
+npm run intel -w core publish     # 发布本地情报到 Nostr relay
+npm run intel -w core subscribe   # 订阅社区情报
+```
+
+- **贡献情报**：在 GitHub Issue 里用「Job intel report」模板提交（纯勾选事实，无自由文本）
+- **共享边界**：只共享结构化标签与事实，原始 JD 文本 / HR 姓名 / 联系方式在代码层被硬性排除
+- 完整架构与部署说明：[docs/intel-network.md](intel-network.md)
 
 ---
 
