@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w core",
+    "build": "npm run build -w core && npm run build -w extension",
     "test": "npm test -w core && npm test -w extension"
   },
   "engines": {
