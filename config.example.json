@@ -1,0 +1,11 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-v4-flash",
+  "apiKey": "sk-在这里填写你的API密钥",
+  "thinking": false,
+  "maxTokens": 4096,
+  "temperature": 0.3,
+  "concurrency": 2,
+  "port": 3000,
+  "logLevel": "info"
+}
