@@ -16,8 +16,14 @@ const REPORTS_FILE = 'reports.jsonl';
 
 export interface TagSearchFilters {
   techStack?: string[];
+  /** All listed flags must be present. */
   riskFlags?: string[];
+  /** Records carrying ANY listed flag are excluded (user wants to avoid). */
+  excludeRiskFlags?: string[];
   workHours?: string;
+  degreeReq?: string;
+  yearsReq?: string;
+  remote?: boolean;
 }
 
 export class JdStore {
@@ -82,12 +88,17 @@ export class JdStore {
   searchByTags(filters: TagSearchFilters): JdRecord[] {
     const tech = filters.techStack ?? [];
     const risk = filters.riskFlags ?? [];
+    const excludeRisk = filters.excludeRiskFlags ?? [];
     return [...this.records.values()].filter((r) => {
       const tags = r.tags;
       if (!tags) return false;
       if (tech.length > 0 && !tech.every((t) => tags.techStack.includes(t))) return false;
       if (risk.length > 0 && !risk.every((f) => tags.riskFlags.includes(f))) return false;
+      if (excludeRisk.length > 0 && excludeRisk.some((f) => tags.riskFlags.includes(f))) return false;
       if (filters.workHours && tags.workHours !== filters.workHours) return false;
+      if (filters.degreeReq && tags.degreeReq !== filters.degreeReq) return false;
+      if (filters.yearsReq && tags.yearsReq !== filters.yearsReq) return false;
+      if (filters.remote === true && tags.remote !== true) return false;
       return true;
     });
   }

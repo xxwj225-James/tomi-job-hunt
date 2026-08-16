@@ -21,6 +21,11 @@
       "run_at": "document_idle"
     },
     {
+      "matches": ["https://www.zhipin.com/web/geek/job*"],
+      "js": ["content/zhipin-list.js"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["https://www.liepin.com/job/*"],
       "js": ["content/liepin.js"],
       "run_at": "document_idle"

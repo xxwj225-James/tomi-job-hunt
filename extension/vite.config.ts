@@ -12,6 +12,7 @@ export default defineConfig({
         popup: resolve(__dirname, 'popup.html'),
         'content/zhipin': resolve(__dirname, 'src/content/zhipin.ts'),
         'content/zhipin-chat': resolve(__dirname, 'src/content/zhipin-chat.ts'),
+        'content/zhipin-list': resolve(__dirname, 'src/content/zhipin-list.ts'),
         'content/liepin': resolve(__dirname, 'src/content/liepin.ts'),
       },
       output: {

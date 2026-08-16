@@ -29,6 +29,10 @@ import {
 import { tagJdWithRetry } from '../jd/tagger.js';
 import { sanitizeReportNote } from '../jd/sanitize.js';
 import { greetJd, loadResume } from '../jd/greeting.js';
+import { scoreJd } from '../jd/match.js';
+import { semanticSearch } from '../jd/semantic-search.js';
+import { mdToHtml, tailorResume } from '../jd/tailor.js';
+import { interviewPrep } from '../jd/interview.js';
 import type { JdStore } from '../jd/store.js';
 
 const chatRequestSchema = z.object({
@@ -64,6 +68,27 @@ const greetingRequestSchema = z.object({
     hrName: z.string().optional(),
   }),
   resume: z.string().optional(),
+});
+
+const jdWithResumeSchema = z.object({
+  jd: z.object({
+    title: z.string().min(1),
+    company: z.string().min(1),
+    salaryText: z.string().default(''),
+    requirements: z.string().default(''),
+    hrName: z.string().optional(),
+  }),
+  resume: z.string().optional(),
+});
+
+const semanticSearchSchema = z.object({
+  query: z.string().min(2).max(200),
+});
+
+const exportSchema = z.object({
+  tailoredMd: z.string().min(1),
+  format: z.enum(['md', 'doc']).default('md'),
+  jdTitle: z.string().optional(),
 });
 
 export function registerRoutes(app: Hono, deps: RouteDeps): void {
@@ -240,6 +265,124 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       deps.ws.broadcast({ type: 'job/error', jobId, message });
       const status = err instanceof ChatProviderError ? 502 : 500;
       return c.json({ error: message, jobId }, status);
+    }
+  });
+
+  // --- Phase 2: match scoring / semantic search / resume tailoring ---
+
+  app.post('/v1/match', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = jdWithResumeSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume } = parsed.data;
+    const effectiveResume = resume ?? loadResume(deps.configDir);
+    try {
+      const result = await deps.queue.run(() =>
+        scoreJd(deps.provider, jd, effectiveResume, deps.log.child('match')),
+      );
+      deps.log.info(`match: score=${result.score} verdict=${result.verdict} (${jd.company} — ${jd.title})`);
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  app.post('/v1/jd/semantic-search', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = semanticSearchSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    try {
+      const result = await deps.queue.run(() =>
+        semanticSearch(deps.provider, deps.store, parsed.data.query, deps.log.child('search')),
+      );
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  app.post('/v1/resume/tailor', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = jdWithResumeSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume } = parsed.data;
+    const effectiveResume = resume ?? loadResume(deps.configDir);
+    if (!effectiveResume) {
+      return c.json({ error: '未配置简历：请先创建 ~/.tomi-job-hunt/resume.md（模板见 docs/resume.template.md）' }, 400);
+    }
+    try {
+      const tailoredMd = await deps.queue.run(() =>
+        tailorResume(deps.provider, jd, effectiveResume, deps.log.child('tailor')),
+      );
+      return c.json({ tailoredMd });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  app.post('/v1/resume/export', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = exportSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { tailoredMd, format, jdTitle } = parsed.data;
+    const safeTitle = (jdTitle ?? 'resume').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'resume';
+    if (format === 'md') {
+      return new Response(tailoredMd, {
+        headers: {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${safeTitle}-tailored.md"`,
+        },
+      });
+    }
+    const html = mdToHtml(tailoredMd);
+    return new Response(html, {
+      headers: {
+        // Word opens HTML .doc files natively — zero-dependency export path.
+        'Content-Type': 'application/msword; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${safeTitle}-tailored.doc"`,
+      },
+    });
+  });
+
+  // --- Phase 3: interview prep ---
+
+  app.post('/v1/interview-prep', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = jdWithResumeSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume } = parsed.data;
+    const effectiveResume = resume ?? loadResume(deps.configDir);
+    try {
+      const result = await deps.queue.run(() =>
+        interviewPrep(deps.provider, jd, effectiveResume, deps.log.child('interview')),
+      );
+      deps.log.info(`interview: ${result.questions.length} questions for ${jd.company}`);
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
     }
   });
 }

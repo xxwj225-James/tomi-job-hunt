@@ -268,8 +268,10 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
             rows: [],
             tags: event.tags,
             actions: [
-              { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
               { label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true },
+              { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
+              { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
+              { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
             ],
           });
         } else {
@@ -329,6 +331,93 @@ export function fillPitch(pitch: string): void {
     rows: filled ? ['✅ 已填入聊天框'] : ['未找到聊天框输入区 — 请先点击「立即沟通」打开聊天窗口，再点一次「填入聊天框」。'],
     pitch,
   });
+}
+
+// --- Phase 2/3 panel actions: match scoring + interview prep ---
+
+export async function showMatch(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  showPanel({ state: 'tagging', title: panelTitle, rows: ['正在计算匹配度（0-100）…'] });
+  try {
+    const resp = await fetch(`${CORE_BASE}/v1/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jd: {
+          title: ctx.jd.title,
+          company: ctx.jd.company,
+          salaryText: ctx.jd.salaryText,
+          requirements: ctx.jd.requirements,
+        },
+      }),
+    });
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `HTTP ${resp.status}`);
+    }
+    const result = (await resp.json()) as {
+      score: number;
+      verdict: string;
+      strengths: string[];
+      gaps: string[];
+      risks: string[];
+    };
+    const rows = [
+      `综合得分 ${result.score} 分 · ${result.verdict}`,
+      ...(result.strengths.length > 0 ? ['', '✅ 优势:'] : []),
+      ...result.strengths.map((s) => `  · ${s}`),
+      ...(result.gaps.length > 0 ? ['', '⚠️ 短板:'] : []),
+      ...result.gaps.map((g) => `  · ${g}`),
+      ...(result.risks.length > 0 ? ['', '🚨 避坑:'] : []),
+      ...result.risks.map((r) => `  · ${r}`),
+    ];
+    showPanel({
+      title: `${panelTitle} — 匹配度`,
+      rows,
+      actions: [
+        { label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) },
+      ],
+    });
+  } catch (err) {
+    showPanel({ state: 'error', title: panelTitle, rows: [], error: `打分失败: ${(err as Error).message}` });
+  }
+}
+
+export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  showPanel({ state: 'tagging', title: panelTitle, rows: ['正在预测面试题…'] });
+  try {
+    const resp = await fetch(`${CORE_BASE}/v1/interview-prep`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jd: {
+          title: ctx.jd.title,
+          company: ctx.jd.company,
+          salaryText: ctx.jd.salaryText,
+          requirements: ctx.jd.requirements,
+        },
+      }),
+    });
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `HTTP ${resp.status}`);
+    }
+    const result = (await resp.json()) as {
+      questions: Array<{ q: string; intent: string; starHint: string }>;
+    };
+    const rows = result.questions.flatMap((question, i) => [
+      `Q${i + 1}. ${question.q}`,
+      `  考察: ${question.intent}`,
+      `  建议: ${question.starHint}`,
+      '',
+    ]);
+    showPanel({
+      title: `${panelTitle} — 面试准备`,
+      rows,
+      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+    });
+  } catch (err) {
+    showPanel({ state: 'error', title: panelTitle, rows: [], error: `面试准备失败: ${(err as Error).message}` });
+  }
 }
 
 function escapeHtml(text: string): string {
