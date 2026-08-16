@@ -1,0 +1,50 @@
+# TomiHunt Intel Feed aggregation (Phase 5C, optional infra)
+#
+# Nightly: download R2 submission objects (cloudflare/worker.js), merge into
+# data/intel-feed.json with dedupe + AI spam screening left to maintainers,
+# and commit. Requires repository secrets:
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+name: intel-feed-aggregate
+
+on:
+  schedule:
+    - cron: '23 17 * * *' # daily 01:23 (UTC+8), off the :00 mark
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download submissions from R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          npx wrangler r2 object get "$R2_BUCKET/submissions" --pipe --recursive \
+            > .tmp-submissions.jsonl 2>/dev/null || echo '{}' > .tmp-submissions.jsonl
+
+      - name: Merge into intel-feed.json
+        run: |
+          npm install --workspaces --include-workspace-root=false
+          npx tsx .github/workflows/merge-intel.ts
+
+      - name: Commit feed
+        run: |
+          if [ -n "$(git status --porcelain data/)" ]; then
+            git config user.name 'tomi-intel-bot'
+            git config user.email 'intel-bot@users.noreply.github.com'
+            git add data/
+            git commit -m "chore(intel): aggregate community feed $(date +%F)"
+            git push
+          fi

@@ -61,6 +61,18 @@ const fileConfigSchema = z.object({
   concurrency: z.number().int().min(1).max(16).optional(),
   port: z.number().int().min(1).max(65535).optional(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+  // Decentralized intel network (Phase 5) — all optional
+  intel: z
+    .object({
+      nostr: z
+        .object({
+          relays: z.array(z.string()).max(10).default([]),
+          /** hex private key (nsec) — use a DEDICATED key, never a personal one */
+          privateKey: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export interface AppConfig {
@@ -69,6 +81,9 @@ export interface AppConfig {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   /** Directory where config.json was loaded from (default ~/.tomi-job-hunt). */
   configDir: string;
+  intel: {
+    nostr?: { relays: string[]; privateKey?: string };
+  };
 }
 
 /** Resolves ~/.tomi-job-hunt, overridable with TOMI_HOME (mainly for tests). */
@@ -139,6 +154,9 @@ export function loadConfig(options?: {
     port: intEnv(env.TOMI_PORT) ?? file.port ?? 3000,
     logLevel: (env.TOMI_LOG_LEVEL ?? file.logLevel ?? 'info') as AppConfig['logLevel'],
     configDir: dir,
+    intel: {
+      nostr: file.intel?.nostr,
+    },
   };
 }
 

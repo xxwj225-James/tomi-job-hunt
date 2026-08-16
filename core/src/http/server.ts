@@ -34,6 +34,7 @@ import { semanticSearch } from '../jd/semantic-search.js';
 import { mdToHtml, tailorResume } from '../jd/tailor.js';
 import { interviewPrep } from '../jd/interview.js';
 import { Board, BOARD_STATUSES } from '../jd/board.js';
+import { draftColdEmail, huntCompanies } from '../hunt/reverse.js';
 import type { JdStore } from '../jd/store.js';
 
 const chatRequestSchema = z.object({
@@ -67,6 +68,19 @@ const boardAddSchema = z.object({
   title: z.string().min(1).max(200),
   url: z.string().max(500).default(''),
   note: z.string().max(200).optional(),
+});
+
+const huntCompaniesSchema = z.object({
+  skills: z.array(z.string().min(1).max(100)).min(1).max(20),
+  cities: z.array(z.string().min(1).max(50)).max(10).optional(),
+  count: z.number().int().min(5).max(50).default(20),
+});
+
+const coldEmailSchema = z.object({
+  company: z.string().min(1).max(100),
+  skills: z.array(z.string().min(1).max(100)).min(1).max(20),
+  context: z.string().max(2000).optional(),
+  resume: z.string().optional(),
 });
 
 const greetingRequestSchema = z.object({
@@ -413,5 +427,49 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     }
     const entry = deps.board.add(parsed.data);
     return c.json(entry, 201);
+  });
+
+  // --- Phase 6: reverse job hunting ---
+
+  app.post('/v1/hunt/companies', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = huntCompaniesSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { skills, cities, count } = parsed.data;
+    try {
+      const result = await deps.queue.run(() =>
+        huntCompanies(deps.provider, skills, cities, count, deps.log.child('hunt')),
+      );
+      deps.log.info(`hunt: ${result.companies.length} target companies for [${skills.slice(0, 3).join(', ')}…]`);
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  app.post('/v1/hunt/cold-email', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = coldEmailSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { company, skills, context, resume } = parsed.data;
+    const effectiveResume = resume ?? loadResume(deps.configDir);
+    try {
+      const result = await deps.queue.run(() =>
+        draftColdEmail(deps.provider, company, skills, effectiveResume, context, deps.log.child('hunt')),
+      );
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
   });
 }

@@ -1,0 +1,55 @@
+name: Job intel report (岗位情报共享)
+description: Share structured job intel with the community — facts only, no free text
+title: '[Intel] <company> — <job title>'
+labels: [intel]
+body:
+  - type: input
+    id: company
+    attributes:
+      label: 公司 / Company
+      placeholder: 例：某某科技
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: 岗位 / Job title
+      placeholder: 例：高级后端工程师
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: 来源平台 / Source platform
+      placeholder: zhipin / liepin / other
+    validations:
+      required: true
+  - type: checkboxes
+    id: facts
+    attributes:
+      label: 结构化事实 / Structured facts (select all that apply — no free-text claims)
+      options:
+        - label: 实际沟通薪资与标注不符 (salary_mismatch)
+        - label: HR 超 30 天未回复/未活跃 (no_response_30d)
+        - label: 挂职不招 / HR 刷 KPI (fake_listing)
+        - label: 无偿加班 (unpaid_ot)
+        - label: 大小周/单休 (single_day_off)
+        - label: 外包/驻场 (outsourcing)
+        - label: 试用期不交社保 (no_social_insurance)
+        - label: 面试体验差 / 要求自带电脑无偿试稿 (interview_waste)
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: 补充说明（≤100字，仅客观事实）/ Supporting facts (≤100 chars, facts only)
+      description: 请勿包含 HR 姓名、电话、微信等个人信息；请勿使用主观攻击性语言
+      placeholder: 例：2026-08 沟通，标注 20-30K，实际给出 12K
+  - type: checkboxes
+    id: agreement
+    attributes:
+      label: 声明 / Declaration
+      options:
+        - label: 以上信息为本人亲身经历，不含个人隐私信息，并授权以 MIT 协议公开共享
+    validations:
+      required: true
