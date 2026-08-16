@@ -33,6 +33,7 @@ import { scoreJd } from '../jd/match.js';
 import { semanticSearch } from '../jd/semantic-search.js';
 import { mdToHtml, tailorResume } from '../jd/tailor.js';
 import { interviewPrep } from '../jd/interview.js';
+import { Board, BOARD_STATUSES } from '../jd/board.js';
 import type { JdStore } from '../jd/store.js';
 
 const chatRequestSchema = z.object({
@@ -55,9 +56,18 @@ export interface RouteDeps {
   log: Logger;
   ws: WsHub;
   store: JdStore;
-  /** Config dir (~/.tomi-job-hunt) — resume.md is loaded from here. */
+  /** Config dir (~/.tomi-job-hunt) — resume.md / board.md live here. */
   configDir: string;
+  board: Board;
 }
+
+const boardAddSchema = z.object({
+  status: z.enum(BOARD_STATUSES),
+  company: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
+  url: z.string().max(500).default(''),
+  note: z.string().max(200).optional(),
+});
 
 const greetingRequestSchema = z.object({
   jd: z.object({
@@ -384,5 +394,24 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const status = err instanceof ChatProviderError ? 502 : 500;
       return c.json({ error: message }, status);
     }
+  });
+
+  // --- Phase 4: job application tracker board ---
+
+  app.get('/v1/board', (c) => {
+    const entries = deps.board.list();
+    const counts = Object.fromEntries(BOARD_STATUSES.map((s) => [s, entries.filter((e) => e.status === s).length]));
+    return c.json({ path: deps.board.path, counts, entries });
+  });
+
+  app.post('/v1/board', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = boardAddSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const entry = deps.board.add(parsed.data);
+    return c.json(entry, 201);
   });
 }

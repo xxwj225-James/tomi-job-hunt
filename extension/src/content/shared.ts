@@ -271,6 +271,7 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
               { label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true },
               { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
               { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
+              { label: '加入看板', onClick: () => void addToBoard(ctx, panelTitle) },
               { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
             ],
           });
@@ -379,6 +380,32 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
     });
   } catch (err) {
     showPanel({ state: 'error', title: panelTitle, rows: [], error: `打分失败: ${(err as Error).message}` });
+  }
+}
+
+export async function addToBoard(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  try {
+    const resp = await fetch(`${CORE_BASE}/v1/board`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'greeted',
+        company: ctx.jd.company,
+        title: ctx.jd.title,
+        url: ctx.jd.url,
+      }),
+    });
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `HTTP ${resp.status}`);
+    }
+    showPanel({
+      title: panelTitle,
+      rows: ['✅ 已加入看板（已打招呼）', '看板文件: ~/.tomi-job-hunt/board.md'],
+      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+    });
+  } catch (err) {
+    showPanel({ state: 'error', title: panelTitle, rows: [], error: `加入看板失败: ${(err as Error).message}` });
   }
 }
 
