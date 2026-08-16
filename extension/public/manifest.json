@@ -7,7 +7,11 @@
   "host_permissions": [
     "https://www.zhipin.com/*",
     "https://www.liepin.com/*",
-    "http://127.0.0.1:3000/*"
+    "http://127.0.0.1:3000/*",
+    "https://api.deepseek.com/*",
+    "https://api.moonshot.cn/*",
+    "https://dashscope.aliyuncs.com/*",
+    "https://api.anthropic.com/*"
   ],
   "content_scripts": [
     {
@@ -34,5 +38,6 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "TomiHunt"
-  }
+  },
+  "options_page": "options.html"
 }

@@ -23,6 +23,10 @@ async function refresh(): Promise<void> {
   }
 }
 
+document.getElementById('open-options')?.addEventListener('click', () => {
+  void chrome.runtime.openOptionsPage();
+});
+
 void refresh();
 setInterval(() => void refresh(), 5000);
 

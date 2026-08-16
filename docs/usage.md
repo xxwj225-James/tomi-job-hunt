@@ -1,8 +1,34 @@
 # 使用指南
 
-从零到能用，按顺序做完 5 步即可。
+两种使用方式，按需选择：
+
+- **方式一 · 直连模式（推荐普通用户）**：只装浏览器插件 + 粘贴 API Key，**不需要 Node、不需要启动任何服务**。覆盖核心闭环（JD 提取 / AI 标签 / 打招呼语 / 打分 / 面试准备）。
+- **方式二 · 完整模式（进阶用户）**：额外运行本地 Core 服务，解锁语义搜索、求职看板、岗位雷达、情报网。Windows 用户双击 `start.bat` 即可，无需命令行。
 
 ---
+
+## 方式一：直连模式（5 分钟上手）
+
+1. 下载 Releases 中的 `extension.zip` 并解压（开发者可自行 `npm run build -w extension`）
+2. `chrome://extensions`（Edge 为 `edge://extensions`）→ 开启**开发者模式** → **加载已解压的扩展程序** → 选择解压目录
+3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Kimi / Qwen / Claude）→ 粘贴 API Key → **保存并测试连接**
+4. 打开 Boss 直聘岗位详情页 → 右下角 🤖 TomiHunt 面板自动工作；猎聘同理
+5. 生成打招呼语后点「立即沟通」，在聊天页一键填入
+
+API Key 获取地址：
+
+| 服务商 | 地址 | 参考价格（输入/输出，每百万 token） |
+|---|---|---|
+| DeepSeek | platform.deepseek.com | ~¥0.5-2 / ~¥3-16 |
+| Kimi | platform.moonshot.cn | ~¥4-8 / ~¥16-30 |
+| Qwen | 阿里云百炼 bailian.console.aliyun.com | 免费额度 + 按量 |
+| Claude | console.anthropic.com | $0.8-3 / $4-15 |
+
+> Key 只保存在本机浏览器（chrome.storage.local），不发往任何中间服务器。
+
+---
+
+## 方式二：完整模式
 
 ## 第 1 步：环境准备
 
@@ -97,6 +123,10 @@ cp docs/resume.template.md ~/.tomi-job-hunt/resume.md
 [docs/resume.template.md](resume.template.md)。
 
 ## 第 4 步：启动 Core 服务
+
+**Windows 用户**：直接双击项目根目录的 `start.bat` 即可（自动检测 Node、自动安装依赖、保持窗口运行即可）。关闭窗口即停止服务。
+
+**命令行方式**：
 
 ```bash
 # 日常使用（不监听文件变化）

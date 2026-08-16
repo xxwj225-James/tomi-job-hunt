@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TomiHunt 设置</title>
+    <style>
+      body {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 24px;
+        font-family: system-ui, 'Microsoft YaHei', sans-serif;
+        font-size: 14px;
+        color: #222;
+      }
+      h1 { font-size: 18px; margin-bottom: 4px; }
+      .sub { color: #888; margin-bottom: 20px; }
+      .field { margin-bottom: 14px; }
+      label { display: block; font-weight: 600; margin-bottom: 4px; }
+      input, select {
+        width: 100%; box-sizing: border-box; padding: 8px 10px;
+        border: 1px solid #d0d5dd; border-radius: 8px; font-size: 14px;
+      }
+      .row { display: flex; gap: 8px; }
+      button {
+        padding: 9px 18px; border: 0; border-radius: 8px; cursor: pointer;
+        font-size: 14px; font-weight: 600; color: #fff;
+        background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      }
+      button.secondary { background: #f0f2f7; color: #333; }
+      #status { margin-top: 12px; padding: 10px; border-radius: 8px; display: none; }
+      #status.ok { display: block; background: #f0fdf4; color: #1a7f37; }
+      #status.err { display: block; background: #fef2f2; color: #c0392b; }
+      .tip { margin-top: 16px; padding: 12px; background: #f6f8ff; border-radius: 8px; line-height: 1.7; font-size: 13px; }
+      .tip b { color: #4f7cff; }
+      .mode-note { font-size: 12px; color: #888; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>🤖 TomiHunt 设置</h1>
+    <div class="sub">直连模式：无需启动任何本地服务，填入 API Key 即可使用</div>
+
+    <div class="field">
+      <label>模型服务商</label>
+      <select id="provider">
+        <option value="deepseek">DeepSeek（国内直连 · 便宜）</option>
+        <option value="kimi">Kimi / Moonshot</option>
+        <option value="qwen">通义千问 Qwen（阿里云百炼）</option>
+        <option value="claude-api">Claude（Anthropic）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>模型</label>
+      <input id="model" type="text" placeholder="留空使用默认最新模型" />
+      <div class="mode-note" id="model-hint"></div>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+      <div class="mode-note">Key 只保存在本机浏览器（chrome.storage.local），不会上传到任何服务器</div>
+    </div>
+    <div class="field">
+      <label><input id="thinking" type="checkbox" /> 思考模式（更慢更贵，适合复杂任务；JSON 类任务建议关闭）</label>
+    </div>
+
+    <div class="row">
+      <button id="save">保存</button>
+      <button id="test" class="secondary">保存并测试连接</button>
+    </div>
+    <div id="status"></div>
+
+    <div class="tip">
+      <b>💡 两种使用模式</b><br />
+      · <b>直连模式</b>（本页配置）：插件直接调用模型 API，装好即用，适合大多数用户<br />
+      · <b>进阶模式</b>（可选）：运行本地 Core 服务可获得语义搜索、求职看板、岗位雷达等完整功能。
+      下载项目后双击 <b>start.bat</b> 即可，无需命令行
+    </div>
+
+    <script type="module" src="/src/options/options.ts"></script>
+  </body>
+</html>

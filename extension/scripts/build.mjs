@@ -14,7 +14,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONTENT_SCRIPTS = ['zhipin', 'zhipin-chat', 'zhipin-list', 'liepin'];
 const watch = process.argv.includes('--watch') ? {} : null;
 
-// 1) Popup (regular build; public/manifest.json copied to dist/)
+// 1) Popup + options (regular build; public/manifest.json copied to dist/)
 await build({
   configFile: false,
   root,
@@ -24,7 +24,10 @@ await build({
     emptyOutDir: false,
     watch,
     rollupOptions: {
-      input: { popup: resolve(root, 'popup.html') },
+      input: {
+        popup: resolve(root, 'popup.html'),
+        options: resolve(root, 'options.html'),
+      },
       output: { entryFileNames: '[name].js' },
     },
   },

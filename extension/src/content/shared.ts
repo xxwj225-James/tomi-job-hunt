@@ -7,6 +7,7 @@
  * - the chat box is a contenteditable div (NOT a textarea) on /web/geek/chat
  */
 import { CoreClient, CORE_BASE, formatTags } from '../core-client.js';
+import { backendGreeting, backendInterview, backendMatch, backendTag, detectBackend } from './backend.js';
 import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 
 export const client = new CoreClient();
@@ -253,39 +254,68 @@ export interface CapturedContext {
   tags?: JdTags | null;
 }
 
+/** Renders the tagged panel — shared by core and direct backends. */
+export function showTaggedPanel(ctx: CapturedContext, panelTitle: string): void {
+  showPanel({
+    title: panelTitle,
+    rows: [],
+    tags: ctx.tags ?? undefined,
+    actions: [
+      { label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true },
+      { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
+      { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
+      { label: '加入看板', onClick: () => void addToBoard(ctx, panelTitle) },
+      { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
+    ],
+  });
+}
+
 export async function captureAndShow(ctx: CapturedContext, panelTitle: string): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在导入并分析 JD…'] });
-  try {
-    const { jobUid, taggingJobId } = await client.captureJd(ctx.jd);
-    ctx.jobUid = jobUid;
-    showPanel({ state: 'tagging', title: panelTitle, rows: ['已导入，等待 AI 结构化标签…'] });
-    client.watch((event) => {
-      if (event.type === 'jd/tagged' && event.jobId === taggingJobId) {
-        ctx.tags = event.tags;
-        if (event.tags) {
-          showPanel({
-            title: panelTitle,
-            rows: [],
-            tags: event.tags,
-            actions: [
-              { label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true },
-              { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
-              { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
-              { label: '加入看板', onClick: () => void addToBoard(ctx, panelTitle) },
-              { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
-            ],
-          });
-        } else {
-          showPanel({ state: 'error', title: panelTitle, rows: [], error: `标签化失败: ${event.error ?? '未知错误'}` });
+  const backend = await detectBackend();
+
+  if (backend === 'core') {
+    try {
+      const { jobUid, taggingJobId } = await client.captureJd(ctx.jd);
+      ctx.jobUid = jobUid;
+      showPanel({ state: 'tagging', title: panelTitle, rows: ['已导入，等待 AI 结构化标签…'] });
+      client.watch((event) => {
+        if (event.type === 'jd/tagged' && event.jobId === taggingJobId) {
+          ctx.tags = event.tags;
+          if (event.tags) {
+            showTaggedPanel(ctx, panelTitle);
+          } else {
+            showPanel({
+              state: 'error',
+              title: panelTitle,
+              rows: [],
+              error: `标签化失败: ${event.error ?? '未知错误'}`,
+            });
+          }
         }
-      }
-    });
+      });
+    } catch (err) {
+      showPanel({
+        state: 'error',
+        title: panelTitle,
+        rows: [],
+        error: `本地 Core 服务异常 (${CORE_BASE}): ${(err as Error).message}`,
+      });
+    }
+    return;
+  }
+
+  // Direct mode — no local service needed, LLM called from the extension
+  try {
+    const tags = await backendTag(ctx.jd);
+    ctx.tags = tags;
+    showTaggedPanel(ctx, panelTitle);
   } catch (err) {
     showPanel({
       state: 'error',
       title: panelTitle,
       rows: [],
-      error: `无法连接本地 Core 服务 (${CORE_BASE})。请确认已运行 npm run dev -w core。详情: ${(err as Error).message}`,
+      error: `分析失败: ${(err as Error).message}`,
     });
   }
 }
@@ -293,14 +323,12 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
 export async function generatePitch(ctx: CapturedContext, panelTitle: string): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在生成打招呼语…'] });
   try {
-    const result: GreetingResult = await client.greeting({
-      jd: {
-        title: ctx.jd.title,
-        company: ctx.jd.company,
-        salaryText: ctx.jd.salaryText,
-        requirements: ctx.jd.requirements,
-        hrName: ctx.jd.hrName,
-      },
+    const result: GreetingResult = await backendGreeting({
+      title: ctx.jd.title,
+      company: ctx.jd.company,
+      salaryText: ctx.jd.salaryText,
+      requirements: ctx.jd.requirements,
+      hrName: ctx.jd.hrName,
     });
     // Handoff: 立即沟通 navigates to /web/geek/chat/* — the chat page script
     // reads the pitch back from chrome.storage.session.
@@ -339,23 +367,12 @@ export function fillPitch(pitch: string): void {
 export async function showMatch(ctx: CapturedContext, panelTitle: string): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在计算匹配度（0-100）…'] });
   try {
-    const resp = await fetch(`${CORE_BASE}/v1/match`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jd: {
-          title: ctx.jd.title,
-          company: ctx.jd.company,
-          salaryText: ctx.jd.salaryText,
-          requirements: ctx.jd.requirements,
-        },
-      }),
-    });
-    if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? `HTTP ${resp.status}`);
-    }
-    const result = (await resp.json()) as {
+    const result = (await backendMatch({
+      title: ctx.jd.title,
+      company: ctx.jd.company,
+      salaryText: ctx.jd.salaryText,
+      requirements: ctx.jd.requirements,
+    })) as {
       score: number;
       verdict: string;
       strengths: string[];
@@ -384,6 +401,14 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
 }
 
 export async function addToBoard(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  if ((await detectBackend()) === 'direct') {
+    showPanel({
+      title: panelTitle,
+      rows: ['看板是本地 Core 服务的进阶功能。', '启动方式：双击项目里的 start.bat（无需命令行）。'],
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
+    });
+    return;
+  }
   try {
     const resp = await fetch(`${CORE_BASE}/v1/board`, {
       method: 'POST',
@@ -402,7 +427,7 @@ export async function addToBoard(ctx: CapturedContext, panelTitle: string): Prom
     showPanel({
       title: panelTitle,
       rows: ['✅ 已加入看板（已打招呼）', '看板文件: ~/.tomi-job-hunt/board.md'],
-      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
     });
   } catch (err) {
     showPanel({ state: 'error', title: panelTitle, rows: [], error: `加入看板失败: ${(err as Error).message}` });
@@ -412,25 +437,12 @@ export async function addToBoard(ctx: CapturedContext, panelTitle: string): Prom
 export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在预测面试题…'] });
   try {
-    const resp = await fetch(`${CORE_BASE}/v1/interview-prep`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jd: {
-          title: ctx.jd.title,
-          company: ctx.jd.company,
-          salaryText: ctx.jd.salaryText,
-          requirements: ctx.jd.requirements,
-        },
-      }),
-    });
-    if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? `HTTP ${resp.status}`);
-    }
-    const result = (await resp.json()) as {
-      questions: Array<{ q: string; intent: string; starHint: string }>;
-    };
+    const result = (await backendInterview({
+      title: ctx.jd.title,
+      company: ctx.jd.company,
+      salaryText: ctx.jd.salaryText,
+      requirements: ctx.jd.requirements,
+    })) as { questions: Array<{ q: string; intent: string; starHint: string }> };
     const rows = result.questions.flatMap((question, i) => [
       `Q${i + 1}. ${question.q}`,
       `  考察: ${question.intent}`,

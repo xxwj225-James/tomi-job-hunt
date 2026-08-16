@@ -29,8 +29,13 @@
       在 <b>Boss 直聘</b> / <b>猎聘</b> 岗位详情页，右下角会出现
       <b>🤖 TomiHunt</b> 浮动按钮：自动导入 JD → AI 结构化标签 →
       生成打招呼语 → 一键填入聊天框。<br /><br />
-      建议配置本地简历 <code>~/.tomi-job-hunt/resume.md</code>，
-      打招呼语会结合你的真实经历生成。
+      首次使用请点击下方「⚙️ 设置」，粘贴一个 API Key（DeepSeek / Kimi /
+      Qwen / Claude 任选）——<b>无需启动任何本地服务</b>。<br /><br />
+      进阶功能（语义搜索/看板/岗位雷达）需运行本地 Core：下载项目后双击
+      <code>start.bat</code> 即可。
+    </div>
+    <div style="margin-top:10px">
+      <button id="open-options" style="width:100%;padding:9px;border:0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#fff;background:linear-gradient(135deg,#4f7cff,#6a5cff)">⚙️ 设置（粘贴 API Key）</button>
     </div>
     <script type="module" src="/src/popup/popup.ts"></script>
   </body>

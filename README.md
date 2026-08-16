@@ -57,7 +57,20 @@ flowchart LR
 
 ## 🚀 快速开始
 
-**前置要求**：Node.js ≥ 20、Chrome/Edge、任一 LLM API Key（Claude / DeepSeek / Kimi / Qwen）
+### 方式一：纯插件直连（推荐，无需任何技术操作）
+
+**不需要 Node、不需要启动服务**——装好插件、粘贴一个 API Key 即可：
+
+1. 下载本仓库的 [Releases](https://github.com/<your-name>/tomi-job-hunt/releases) 中的 `extension.zip`，解压（或自行 `npm run build -w extension` 后用 `extension/dist/`）
+2. 打开 `chrome://extensions`（Edge 为 `edge://extensions`）→ 右上角开启**开发者模式** → **加载已解压的扩展程序** → 选择解压后的目录
+3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Kimi / Qwen / Claude 任选）→ 粘贴 API Key → **保存并测试连接**
+4. 打开任意 Boss 直聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 一键填入
+
+直连模式覆盖核心闭环：JD 提取、AI 标签、打招呼语、匹配度打分、面试准备。
+
+### 方式二：完整功能（开发者/进阶用户）
+
+本地 Core 服务解锁语义搜索、求职看板、岗位雷达、情报网等全部功能：
 
 ```bash
 # 1. 安装
@@ -72,17 +85,15 @@ cp config.example.json ~/.tomi-job-hunt/config.json
 # 3. 配置简历（可选，强烈建议——话术质量的关键）
 cp docs/resume.template.md ~/.tomi-job-hunt/resume.md
 
-# 4. 启动本地 Core 服务
+# 4. 启动本地 Core 服务（Windows 用户也可直接双击 start.bat）
 npm start -w core
-#   验证：curl http://127.0.0.1:3000/health → {"ok":true,...}
 
 # 5. 构建插件并加载
 npm run build -w extension
 #   打开 chrome://extensions → 开发者模式 → 加载已解压 → 选择 extension/dist/
 ```
 
-然后打开任意 Boss 直聘岗位详情页：右下角 🤖 TomiHunt 面板自动导入 JD →
-AI 结构化标签 → 生成打招呼语 → 立即沟通 → 聊天页一键填入。
+插件会自动探测 Core：在线则用完整功能，离线则自动退回直连模式。
 
 **详细说明**（配置项参考、环境变量、API 列表、FAQ）见 [docs/usage.md](docs/usage.md)。
 
