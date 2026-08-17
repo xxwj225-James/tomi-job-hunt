@@ -84,6 +84,7 @@ cp config.example.json ~/.tomi-job-hunt/config.json
 
 # 3. 配置简历（可选，强烈建议——话术质量的关键）
 cp docs/resume.template.md ~/.tomi-job-hunt/resume.md
+#   也支持 resume.docx / resume.pdf（本机自动解析，不上传）
 
 # 4. 启动本地 Core 服务（Windows 用户也可直接双击 start.bat）
 npm start -w core

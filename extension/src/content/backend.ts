@@ -8,6 +8,7 @@
  */
 import { CORE_BASE, CoreClient } from '../core-client.js';
 import { directGreeting, directInterviewPrep, directMatch, directTagJd } from '../direct/prompts.js';
+import { loadResume } from '../direct/resume.js';
 import type { GreetingResult, JdTags } from '../types.js';
 
 export type Backend = 'core' | 'direct';
@@ -61,16 +62,17 @@ export async function backendTag(jd: JdLike): Promise<JdTags> {
 
 export async function backendGreeting(jd: JdLike): Promise<GreetingResult> {
   if ((await detectBackend()) === 'core') {
+    // Core loads ~/.tomi-job-hunt/resume.md itself
     return client.greeting({ jd: { ...jd, hrName: jd.hrName } });
   }
-  return directGreeting(jd);
+  return directGreeting(jd, await loadResume());
 }
 
 export async function backendMatch(jd: JdLike) {
   if ((await detectBackend()) === 'core') {
     return corePost<Record<string, unknown>>('/v1/match', { jd });
   }
-  return directMatch(jd);
+  return directMatch(jd, await loadResume());
 }
 
 export async function backendInterview(jd: JdLike) {
@@ -80,5 +82,5 @@ export async function backendInterview(jd: JdLike) {
       { jd },
     );
   }
-  return directInterviewPrep(jd);
+  return directInterviewPrep(jd, await loadResume());
 }

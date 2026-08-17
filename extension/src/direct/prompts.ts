@@ -109,7 +109,7 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
   const result = await directChat([{ role: 'user', content: prompt }]);
   return {
     pitch: result.text.trim().slice(0, 120),
-    warning: resume ? undefined : '未配置简历，已按 JD 通用生成（可在 Core 进阶模式中配置 resume.md）',
+    warning: resume ? undefined : '未配置简历，已按 JD 通用生成（点插件图标 → 设置 → 粘贴简历，话术会更有针对性）',
   };
 }
 

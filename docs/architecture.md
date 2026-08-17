@@ -65,3 +65,8 @@ src/
   "bypassPermissions"` because the service has no interactive terminal.
 - **Local-only binding**: the server binds `127.0.0.1` and never listens on
   external interfaces. The extension is the only intended client.
+- **Resume loading is file-format agnostic**: `jd/resume-files.ts` reads
+  `resume.md` / `resume.txt` directly and parses `resume.docx` (mammoth) and
+  `resume.pdf` (pdfjs) on the machine — priority md > txt > docx > pdf. The
+  extension mirrors this in-browser (`options/resume-parser.ts`) so direct
+  mode never uploads a resume either.

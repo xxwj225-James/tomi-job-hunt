@@ -62,6 +62,21 @@
       <label><input id="thinking" type="checkbox" /> 思考模式（更慢更贵，适合复杂任务；JSON 类任务建议关闭）</label>
     </div>
 
+    <div class="field">
+      <label>你的简历（可选但强烈建议）</label>
+      <input id="resume-file" type="file" accept=".pdf,.docx,.doc,.txt,.md" style="margin-bottom:8px" />
+      <div class="mode-note" id="resume-file-hint" style="margin-bottom:6px">
+        支持直接上传 PDF / Word（.docx）简历文件——在浏览器本地解析，<b>不会上传到任何服务器</b>。
+        旧版 .doc 请另存为 .docx 或导出 PDF。
+      </div>
+      <textarea id="resume" rows="10" placeholder="上传文件后自动填充，也可以直接粘贴文本，例如：&#10;&#10;# 求职意向&#10;- 目标岗位：高级后端工程师&#10;- 期望薪资：25-35K·14薪&#10;&#10;# 技能栈&#10;- Java 5年、Go 2年、Redis、K8s、大模型 RAG&#10;&#10;# 工作经历&#10;## 某某科技（2023-至今）· 高级后端&#10;- 主导订单中心微服务改造，P99 从 800ms 降到 150ms"></textarea>
+      <div class="mode-note">
+        打招呼语/打分/面试准备会结合你的真实经历生成，质量显著提升。<br />
+        只保存在本机浏览器（chrome.storage.local）。量化成果（数字、指标）越多效果越好。<br />
+        （进阶模式用户请使用 ~/.tomi-job-hunt/resume.md，本框可留空）
+      </div>
+    </div>
+
     <div class="row">
       <button id="save">保存</button>
       <button id="test" class="secondary">保存并测试连接</button>

@@ -119,7 +119,15 @@ Claude 系（claude-code / claude-api）用 `ANTHROPIC_API_KEY`。
 cp docs/resume.template.md ~/.tomi-job-hunt/resume.md
 ```
 
-没有简历也能用——话术会按 JD 通用生成，并提示你配置简历。模板见
+也支持直接把你的简历文件放进配置目录，Core 会自动解析（全部在本机完成，不上传）：
+
+| 文件名 | 格式 | 解析方式 |
+|---|---|---|
+| `resume.md` / `resume.txt` | Markdown / 纯文本 | 直接读取（优先） |
+| `resume.docx` | Word 文档 | 本机解析（mammoth） |
+| `resume.pdf` | PDF | 本机解析（pdfjs；扫描件图片无法提取文本） |
+
+优先级：`md > txt > docx > pdf`。没有简历也能用——话术会按 JD 通用生成，并提示你配置简历。模板见
 [docs/resume.template.md](resume.template.md)。
 
 ## 第 4 步：启动 Core 服务
@@ -167,7 +175,7 @@ npm run build -w extension
 
 1. **浏览岗位详情页**（`zhipin.com/job_detail/xxx.html`）——右下角出现 **🤖 TomiHunt** 浮动按钮
 2. 插件自动导入 JD 并调用 AI 打结构化标签（技术栈 / 年限 / 学历 / 工时 / 风险词），完成后在面板中展示
-3. 点击 **生成打招呼语** —— 80~120 字，结合你的 resume.md 直击 JD 硬性要求
+3. 点击 **生成打招呼语** —— 80~120 字，结合你的本地简历直击 JD 硬性要求
 4. 点击 **立即沟通** 进入聊天页 —— 话术已自动带到聊天页
 5. 点击面板上的 **填入聊天框**，确认后按 Enter 发送
 
@@ -189,7 +197,7 @@ npm run build -w extension
 | `POST /v1/jd/:jobUid/report` | 提交结构化岗位报告（本地存储，自动脱敏） |
 | `POST /v1/jd/semantic-search` | 自然语言语义搜索（`{"query":"不用加班、懂 RAG 的后端"}`） |
 | `POST /v1/match` | 匹配度打分 0-100 + 优势/短板/避坑诊断 |
-| `POST /v1/greeting` | 生成打招呼语（自动读取 resume.md） |
+| `POST /v1/greeting` | 生成打招呼语（自动读取本地简历文件） |
 | `POST /v1/interview-prep` | 预测 5-10 道面试题 + STAR 建议 |
 | `POST /v1/resume/tailor` | 按 JD 定制简历（Markdown） |
 | `POST /v1/resume/export` | 导出定制简历（`format: md / doc`，Word 可直接打开 .doc） |

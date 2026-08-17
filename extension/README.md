@@ -12,7 +12,7 @@ job detail page (zhipin/liepin)
   │   beats the dynamic salary font) with DOM fallback; liepin = DOM after
   │   AJAX-injected content appears (waitForJd)
   ├─ POST /v1/jd/capture → Core stores + async LLM tagging (WS jd/tagged)
-  └─ POST /v1/greeting → 100-120 字打招呼语（结合 ~/.tomi-job-hunt/resume.md）
+  └─ POST /v1/greeting → 100-120 字打招呼语（结合本地简历文件）
 
 立即沟通 navigates to /web/geek/chat/* (SPA) — the pitch travels there via
 chrome.storage.session, and zhipin-chat.ts fills the chat box, which is a
@@ -30,6 +30,15 @@ npm run build -w extension
 2. Enable **Developer mode**
 3. **Load unpacked** → select `extension/dist/`
 4. Start the Core service: `npm run dev -w core`
+
+## Resume upload (direct mode)
+
+The options page (🤖 → ⚙️ 设置) accepts a resume file — PDF, Word (.docx),
+.txt or .md. It is parsed **locally in the browser** (pdfjs / mammoth) and
+kept in `chrome.storage.local`; nothing is uploaded. Greeting / match /
+interview-prep prompts then use it. Legacy .doc is not parseable in-browser —
+export to .docx or PDF first. Core mode instead reads
+`~/.tomi-job-hunt/resume.md` / `resume.docx` / `resume.pdf` server-side.
 
 ## Develop
 

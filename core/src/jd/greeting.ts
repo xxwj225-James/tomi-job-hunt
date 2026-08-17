@@ -1,14 +1,12 @@
 /**
  * Greeting pitch engine — "100-character high-response-rate greeting" for
  * Boss直聘. Combines the JD's hard requirements with the user's resume
- * (resume.md in the config dir, optional). Reuses the ChatProvider pipeline.
+ * (loaded via resume-files.ts from the config dir; optional). Reuses the
+ * ChatProvider pipeline.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
 
-export const RESUME_FILE = 'resume.md';
 const MAX_PITCH_LENGTH = 120;
 
 export interface GreetingJd {
@@ -21,14 +19,8 @@ export interface GreetingJd {
 
 export interface GreetingResult {
   pitch: string;
-  /** Set when resume.md was not configured — pitch was generated JD-only. */
+  /** Set when no resume was configured — pitch was generated JD-only. */
   warning?: string;
-}
-
-export function loadResume(configDir: string): string | undefined {
-  const path = join(configDir, RESUME_FILE);
-  if (!existsSync(path)) return undefined;
-  return readFileSync(path, 'utf8').trim() || undefined;
 }
 
 /** Pure prompt builder — unit-testable. */
@@ -68,6 +60,6 @@ export async function greetJd(
   const pitch = result.text.trim().slice(0, MAX_PITCH_LENGTH);
   return {
     pitch,
-    warning: resume ? undefined : '未配置 resume.md（~/.tomi-job-hunt/resume.md），已按 JD 通用生成',
+    warning: resume ? undefined : '未配置简历（~/.tomi-job-hunt/resume.md / resume.docx / resume.pdf），已按 JD 通用生成',
   };
 }

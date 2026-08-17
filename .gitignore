@@ -5,6 +5,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Extension signing artifacts (never commit the private key)
+extension/dist.crx
+extension/dist.pem
+
 # Environment & local config (never commit API keys)
 .env
 .env.local

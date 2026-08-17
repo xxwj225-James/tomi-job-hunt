@@ -28,7 +28,8 @@ import {
 } from '../jd/schema.js';
 import { tagJdWithRetry } from '../jd/tagger.js';
 import { sanitizeReportNote } from '../jd/sanitize.js';
-import { greetJd, loadResume } from '../jd/greeting.js';
+import { greetJd } from '../jd/greeting.js';
+import { loadResumeFile } from '../jd/resume-files.js';
 import { scoreJd } from '../jd/match.js';
 import { semanticSearch } from '../jd/semantic-search.js';
 import { mdToHtml, tailorResume } from '../jd/tailor.js';
@@ -57,7 +58,7 @@ export interface RouteDeps {
   log: Logger;
   ws: WsHub;
   store: JdStore;
-  /** Config dir (~/.tomi-job-hunt) — resume.md / board.md live here. */
+  /** Config dir (~/.tomi-job-hunt) — resume files / board.md live here. */
   configDir: string;
   board: Board;
 }
@@ -273,8 +274,9 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const { jd, resume } = parsed.data;
-    // Prefer the local resume.md unless the caller passed an explicit resume.
-    const effectiveResume = resume ?? loadResume(deps.configDir);
+    // Prefer the local resume file (md/txt/docx/pdf) unless the caller
+    // passed an explicit resume.
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
     const jobId = randomUUID();
     deps.ws.broadcast({ type: 'job/queued', jobId });
     try {
@@ -302,7 +304,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const { jd, resume } = parsed.data;
-    const effectiveResume = resume ?? loadResume(deps.configDir);
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
     try {
       const result = await deps.queue.run(() =>
         scoreJd(deps.provider, jd, effectiveResume, deps.log.child('match')),
@@ -312,7 +314,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
         ...result,
         warning: effectiveResume
           ? undefined
-          : '未配置 resume.md（~/.tomi-job-hunt/resume.md），评分为 JD 通用画像参考，仅供参考',
+          : '未配置简历（~/.tomi-job-hunt/resume.md / resume.docx / resume.pdf），评分为 JD 通用画像参考，仅供参考',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -348,9 +350,9 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const { jd, resume } = parsed.data;
-    const effectiveResume = resume ?? loadResume(deps.configDir);
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
     if (!effectiveResume) {
-      return c.json({ error: '未配置简历：请先创建 ~/.tomi-job-hunt/resume.md（模板见 docs/resume.template.md）' }, 400);
+      return c.json({ error: '未配置简历：请先创建 ~/.tomi-job-hunt/resume.md / resume.docx / resume.pdf（模板见 docs/resume.template.md）' }, 400);
     }
     try {
       const tailoredMd = await deps.queue.run(() =>
@@ -401,7 +403,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const { jd, resume } = parsed.data;
-    const effectiveResume = resume ?? loadResume(deps.configDir);
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
     try {
       const result = await deps.queue.run(() =>
         interviewPrep(deps.provider, jd, effectiveResume, deps.log.child('interview')),
@@ -465,7 +467,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const { company, skills, context, resume } = parsed.data;
-    const effectiveResume = resume ?? loadResume(deps.configDir);
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
     try {
       const result = await deps.queue.run(() =>
         draftColdEmail(deps.provider, company, skills, effectiveResume, context, deps.log.child('hunt')),

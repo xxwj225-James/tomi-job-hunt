@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGreetingPrompt, loadResume } from './greeting.js';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { buildGreetingPrompt } from './greeting.js';
 
 const jd = {
   title: '高级后端工程师',
@@ -31,20 +28,5 @@ describe('buildGreetingPrompt', () => {
     const prompt = buildGreetingPrompt(jd, 'resume');
     expect(prompt).toContain('只输出打招呼语本身');
     expect(prompt).toContain('80~120 字');
-  });
-});
-
-describe('loadResume', () => {
-  it('returns undefined when resume.md is missing', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tomi-resume-'));
-    expect(loadResume(dir)).toBeUndefined();
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('reads and trims resume.md', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tomi-resume-'));
-    writeFileSync(join(dir, 'resume.md'), '\n   # 简历\n  ');
-    expect(loadResume(dir)).toBe('# 简历');
-    rmSync(dir, { recursive: true, force: true });
   });
 });
