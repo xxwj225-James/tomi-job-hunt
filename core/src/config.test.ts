@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config.js';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { loadConfig, readConfigFile, saveConfigFile } from './config.js';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -87,5 +87,59 @@ describe('loadConfig', () => {
     const home = makeHomeWithConfig({ concurrency: 99 });
     expect(() => loadConfig({ home, env: {} })).toThrow(/Invalid/);
     rmSync(home, { recursive: true, force: true });
+  });
+});
+
+describe('saveConfigFile', () => {
+  it('writes a fresh config.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    try {
+      saveConfigFile(dir, { provider: 'deepseek', apiKey: 'sk-new', model: 'deepseek-v4-flash' });
+      const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
+      expect(raw.provider).toBe('deepseek');
+      expect(raw.apiKey).toBe('sk-new');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('merges into an existing config and preserves unknown fields', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    try {
+      writeFileSync(
+        join(dir, 'config.json'),
+        JSON.stringify({ provider: 'kimi', apiKey: 'sk-old', intel: { nostr: { relays: ['wss://x'] } } }),
+      );
+      saveConfigFile(dir, { provider: 'qwen', model: 'qwen3.7-plus' });
+      const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
+      expect(raw.provider).toBe('qwen');
+      expect(raw.apiKey).toBe('sk-old'); // not touched
+      expect((raw.intel as { nostr: { relays: string[] } }).nostr.relays).toEqual(['wss://x']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('empty apiKey keeps the stored key; clearApiKey erases it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    try {
+      writeFileSync(join(dir, 'config.json'), JSON.stringify({ provider: 'kimi', apiKey: 'sk-old' }));
+      saveConfigFile(dir, { apiKey: '   ' });
+      expect(readConfigFile(dir).apiKey).toBe('sk-old');
+      saveConfigFile(dir, { clearApiKey: true });
+      expect(readConfigFile(dir).apiKey).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid values', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    try {
+      expect(() => saveConfigFile(dir, { concurrency: 999 })).toThrow(/Invalid/);
+      expect(() => saveConfigFile(dir, { provider: 'nope' as never })).toThrow(/Invalid/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

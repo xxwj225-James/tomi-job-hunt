@@ -14,7 +14,8 @@ if errorlevel 1 (
 
 echo [TomiHunt] 正在启动本地 Core 服务（127.0.0.1:3000）...
 echo [TomiHunt] 保持本窗口开启即可。关闭窗口即停止服务。
-echo [TomiHunt] 进阶功能入口: http://127.0.0.1:3000/health
+echo [TomiHunt] 首次使用会自动打开浏览器设置页（配置 LLM / 上传简历）。
+echo [TomiHunt] 手动访问: http://127.0.0.1:3000/setup
 
 if not exist node_modules (
   echo [TomiHunt] 首次运行，正在安装依赖（约1-2分钟）...

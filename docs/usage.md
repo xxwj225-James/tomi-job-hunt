@@ -48,6 +48,10 @@ npm install
 
 ## 第 2 步：配置 LLM
 
+> 💡 **推荐方式（无需手写配置文件）**：启动 Core 后打开 `http://127.0.0.1:3000/setup`
+> 设置向导——网页里选择服务商、粘贴 API Key、测试连接、上传简历，一键完成。
+> **首次启动且未配置 API Key 时，Core 会自动打开该页面。**
+
 ### 方式 A：配置文件（推荐）
 
 ```bash
@@ -132,7 +136,7 @@ cp docs/resume.template.md ~/.tomi-job-hunt/resume.md
 
 ## 第 4 步：启动 Core 服务
 
-**Windows 用户**：直接双击项目根目录的 `start.bat` 即可（自动检测 Node、自动安装依赖、保持窗口运行即可）。关闭窗口即停止服务。
+**Windows 用户**：直接双击项目根目录的 `start.bat` 即可（自动检测 Node、自动安装依赖、保持窗口运行即可）。**首次使用且未配置 API Key 时，会自动打开浏览器设置向导**（`/setup`），按页面提示完成配置即可，无需手动编辑配置文件。关闭窗口即停止服务。
 
 **命令行方式**：
 
@@ -205,6 +209,11 @@ npm run build -w extension
 | `POST /v1/hunt/companies` | 技能 → 目标公司清单（含直连渠道建议） |
 | `POST /v1/hunt/cold-email` | 生成直连自荐冷邮件 |
 | `WS /ws` | 任务生命周期事件（queued → started → done / error / jd/tagged） |
+| `GET /setup` | 首次配置向导页（服务商 / API Key / 测试连接 / 简历上传） |
+| `GET /setup/config` | 读取当前配置（API Key 脱敏） |
+| `POST /setup/config` | 保存配置（合并写回，provider 热重载，无需重启） |
+| `POST /setup/test` | 用提交的配置测试 LLM 连接 |
+| `POST /setup/resume` | 上传简历（PDF / docx / txt / md，本机解析） |
 
 示例：
 

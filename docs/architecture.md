@@ -70,3 +70,9 @@ src/
   `resume.pdf` (pdfjs) on the machine — priority md > txt > docx > pdf. The
   extension mirrors this in-browser (`options/resume-parser.ts`) so direct
   mode never uploads a resume either.
+- **First-run setup wizard** (`http/setup.ts`): a local-only `/setup` page
+  replaces hand-editing config.json — pick a provider, paste an API key,
+  test the connection, upload a resume. Saving hot-reloads the running
+  provider (`createChatProviderSafe` keeps the service up with a stub when
+  nothing is configured yet), and an unconfigured first start auto-opens
+  the wizard in the default browser.

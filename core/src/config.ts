@@ -11,7 +11,7 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import * as nodeProcess from 'node:process';
 import { z } from 'zod';
 import type { LLMConfig, ProviderId } from './types.js';
@@ -164,4 +164,80 @@ function intEnv(v: string | undefined): number | undefined {
   if (v === undefined) return undefined;
   const n = Number.parseInt(v, 10);
   return Number.isFinite(n) ? n : undefined;
+}
+
+// --- Config file writing (used by the /setup wizard) ---
+
+export type ConfigFilePatch = Partial<{
+  provider: ProviderId;
+  model: string;
+  /** Empty string leaves the stored key untouched; set clearApiKey to erase it. */
+  apiKey: string;
+  baseUrl: string;
+  thinking: boolean;
+  maxTokens: number;
+  temperature: number;
+  concurrency: number;
+  port: number;
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
+}> & {
+  /** Erase the stored API key entirely (ignores apiKey). */
+  clearApiKey?: boolean;
+};
+
+/** Reads the raw config.json object, or {} when missing/unparseable. */
+export function readConfigFile(dir: string): Record<string, unknown> {
+  const path = join(dir, 'config.json');
+  if (!existsSync(path)) return {};
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Merges a patch into config.json (unknown fields such as `intel` are
+ * preserved), validates the result, and writes it back. Returns the merged
+ * raw object. Throws on invalid values.
+ */
+export function saveConfigFile(dir: string, patch: ConfigFilePatch): Record<string, unknown> {
+  const current = readConfigFile(dir);
+  const next: Record<string, unknown> = { ...current };
+
+  for (const key of [
+    'provider',
+    'model',
+    'baseUrl',
+    'thinking',
+    'maxTokens',
+    'temperature',
+    'concurrency',
+    'port',
+    'logLevel',
+  ] as const) {
+    if (patch[key] !== undefined) next[key] = patch[key];
+  }
+
+  // A blank model/baseUrl means "use the provider default" — drop the stored
+  // value so loadConfig falls back to the preset.
+  if (patch.model !== undefined && String(next.model).trim() === '') delete next.model;
+  if (patch.baseUrl !== undefined && String(next.baseUrl).trim() === '') delete next.baseUrl;
+
+  if (patch.clearApiKey) {
+    delete next.apiKey;
+  } else if (patch.apiKey !== undefined && patch.apiKey.trim() !== '') {
+    next.apiKey = patch.apiKey.trim();
+  }
+
+  // Validate before persisting: reuse the same schema as loadConfig.
+  const parsed = fileConfigSchema.safeParse(next);
+  if (!parsed.success) {
+    throw new Error(`Invalid config: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
+  }
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'config.json'), `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  return next;
 }

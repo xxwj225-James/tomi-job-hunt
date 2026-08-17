@@ -25,7 +25,7 @@ export class ClaudeCodeProvider implements ChatProvider {
     /** Dedicated work dir so the CLI never reads the host user's settings/CLAUDE.md. */
     private readonly workDir: string,
   ) {
-    if (!hasCredentials()) {
+    if (!hasClaudeCredentials()) {
       throw new ChatProviderError(
         this.id,
         'No Anthropic credentials found. Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN), ' +
@@ -116,7 +116,8 @@ export class ClaudeCodeProvider implements ChatProvider {
 
 // --- helpers ---
 
-function hasCredentials(): boolean {
+/** True when any Anthropic credential source is available (env or CLI login). */
+export function hasClaudeCredentials(): boolean {
   const env = process.env;
   if (env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN) return true;
   // Fallback: claude CLI OAuth login credentials (subscription users).
