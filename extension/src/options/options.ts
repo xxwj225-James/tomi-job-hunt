@@ -19,6 +19,7 @@ const statusEl = $<HTMLDivElement>('status');
 const modelHintEl = $<HTMLDivElement>('model-hint');
 const resumeEl = $<HTMLTextAreaElement>('resume');
 const resumeFileEl = $<HTMLInputElement>('resume-file');
+const sendModeEl = $<HTMLSelectElement>('sendMode');
 
 function showStatus(ok: boolean, message: string): void {
   statusEl.textContent = message;
@@ -71,11 +72,14 @@ $('save').addEventListener('click', async () => {
     showStatus(false, '请先填写 API Key');
     return;
   }
-  await chrome.storage.local.set({ 'tomihunt-llm-config': cfg });
+  await chrome.storage.local.set({
+    'tomihunt-llm-config': cfg,
+    'tomihunt-send-mode': sendModeEl.value === 'auto' ? 'auto' : 'manual',
+  });
   if (resumeEl.value.trim()) {
     await chrome.storage.local.set({ 'tomihunt-resume': resumeEl.value.trim() });
   }
-  showStatus(true, '✅ 已保存（含简历）。现在打开 Boss 直聘岗位页即可使用。');
+  showStatus(true, '✅ 已保存（含简历与发送方式）。现在打开 Boss 直聘岗位页即可使用。');
 });
 
 $('test').addEventListener('click', async () => {
@@ -98,9 +102,12 @@ void loadDirectConfig().then((cfg) => {
   thinkingEl.checked = cfg.thinking === true;
   updateModelHint();
 });
-void chrome.storage.local.get('tomihunt-resume').then((data) => {
+void chrome.storage.local.get(['tomihunt-resume', 'tomihunt-send-mode']).then((data) => {
   if (typeof data['tomihunt-resume'] === 'string') {
     resumeEl.value = data['tomihunt-resume'] as string;
+  }
+  if (data['tomihunt-send-mode'] === 'auto') {
+    sendModeEl.value = 'auto';
   }
 });
 updateModelHint();

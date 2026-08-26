@@ -339,7 +339,7 @@ export async function generatePitch(ctx: CapturedContext, panelTitle: string): P
       rows,
       pitch: result.pitch,
       actions: [
-        { label: '填入聊天框', onClick: () => fillPitch(result.pitch), primary: true },
+        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch), primary: true },
         { label: '重新生成', onClick: () => void generatePitch(ctx, panelTitle) },
       ],
     });
@@ -348,16 +348,121 @@ export async function generatePitch(ctx: CapturedContext, panelTitle: string): P
   }
 }
 
-export function fillPitch(pitch: string): void {
-  const filled = fillChatBox(pitch, [
-    '.chat-input textarea',
-    '.input-area textarea',
-    '.message-input textarea',
-    'textarea',
-  ]);
+// --- Send mode (manual confirm vs auto-send) ---
+
+export type SendMode = 'manual' | 'auto';
+
+export async function getSendMode(): Promise<SendMode> {
+  try {
+    const data = await chrome.storage.local.get('tomihunt-send-mode');
+    return data['tomihunt-send-mode'] === 'auto' ? 'auto' : 'manual';
+  } catch {
+    return 'manual';
+  }
+}
+
+// Chat-box selector chain: zhipin (contenteditable + textarea variants) and
+// liepin candidates + generic fallbacks. Order matters — first hit wins.
+const CHAT_INPUT_SELECTORS = [
+  '#chat-input.chat-input[contenteditable="true"]',
+  '.chat-input[contenteditable="true"]',
+  '.chat-input',
+  '.im-chat-input textarea',
+  '.im-input textarea',
+  '.chat-message-input textarea',
+  '.input-area textarea',
+  '.message-input textarea',
+  'textarea',
+  '[contenteditable="true"]',
+];
+
+const SEND_BUTTON_SELECTORS = [
+  'button.btn-send',
+  '.chat-op button',
+  '.chat-op [class*="send"]',
+  '.im-send-btn',
+  'button.send-btn',
+  '[class*="send-btn"]',
+  'button[class*="send"]',
+];
+
+/** Presses Enter on the chat input (primary send path on both sites). */
+function pressEnterOnInput(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  // Only fire Enter on plausible chat inputs — dispatching on a random
+  // focused element (e.g. body) would swallow the send-button fallback.
+  const isChatInput =
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLInputElement ||
+    el.isContentEditable ||
+    /chat|im-input|message/i.test(typeof el.className === 'string' ? el.className : '');
+  if (!isChatInput) return false;
+  for (const type of ['keydown', 'keypress', 'keyup'] as const) {
+    el.dispatchEvent(
+      new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
+    );
+  }
+  return true;
+}
+
+/** Clicks the first visible send button candidate. */
+function clickSendButton(): boolean {
+  for (const sel of SEND_BUTTON_SELECTORS) {
+    for (const btn of document.querySelectorAll<HTMLElement>(sel)) {
+      const visible =
+        typeof btn.checkVisibility === 'function'
+          ? btn.checkVisibility()
+          : getComputedStyle(btn).display !== 'none';
+      if (visible) {
+        btn.click();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Sends the message currently sitting in the chat input. Enter-key path
+ * first (what the sites' own React handlers listen for), send-button click
+ * as fallback.
+ */
+export function sendChatMessage(): boolean {
+  return pressEnterOnInput() || clickSendButton();
+}
+
+/**
+ * Shared fill routine. When autoSend is undefined the stored send mode
+ * decides (default: manual — fill only, user clicks send themselves).
+ */
+export async function fillPitch(pitch: string, autoSend?: boolean): Promise<void> {
+  const shouldAuto = autoSend ?? ((await getSendMode()) === 'auto');
+  const filled = fillChatBox(pitch, CHAT_INPUT_SELECTORS);
+  if (!filled) {
+    showPanel({
+      title: 'TomiHunt',
+      rows: ['未找到聊天框输入区 — 请先点击「立即沟通」打开聊天窗口，再试一次。'],
+      pitch,
+    });
+    return;
+  }
+  if (shouldAuto) {
+    // Give the site's React state a beat to settle, then send.
+    await new Promise((r) => setTimeout(r, 800));
+    const sent = sendChatMessage();
+    showPanel({
+      title: 'TomiHunt',
+      rows: sent
+        ? ['✅ 已自动发送。如需调整，可再次生成。']
+        : ['已填入但未找到发送按钮 — 请手动按 Enter 发送（内容已保留）。'],
+      pitch,
+    });
+    return;
+  }
   showPanel({
     title: 'TomiHunt',
-    rows: filled ? ['✅ 已填入聊天框'] : ['未找到聊天框输入区 — 请先点击「立即沟通」打开聊天窗口，再点一次「填入聊天框」。'],
+    rows: ['✅ 已填入聊天框，确认后自行点击发送。'],
     pitch,
   });
 }

@@ -64,9 +64,9 @@ flowchart LR
 1. 下载本仓库的 [Releases](https://github.com/<your-name>/tomi-job-hunt/releases) 中的 `extension.zip`，解压（或自行 `npm run build -w extension` 后用 `extension/dist/`）
 2. 打开 `chrome://extensions`（Edge 为 `edge://extensions`）→ 右上角开启**开发者模式** → **加载已解压的扩展程序** → 选择解压后的目录
 3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Kimi / Qwen / Claude 任选）→ 粘贴 API Key → **保存并测试连接**
-4. 打开任意 Boss 直聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 一键填入
+4. 打开任意 Boss 直聘 / 猎聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 填入聊天框（或设置为自动发送）
 
-直连模式覆盖核心闭环：JD 提取、AI 标签、打招呼语、匹配度打分、面试准备。
+直连模式覆盖核心闭环：JD 提取、AI 标签、打招呼语（Boss 直聘 + 猎聘）、匹配度打分、面试准备。发送方式可选：填入后自己确认发送（默认），或自动发送。
 
 ### 方式二：完整功能（开发者/进阶用户）
 
