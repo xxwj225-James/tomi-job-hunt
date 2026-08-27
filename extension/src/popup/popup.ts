@@ -10,16 +10,33 @@ if (!statusEl) throw new Error('popup: missing #status');
 const client = new CoreClient();
 
 async function refresh(): Promise<void> {
+  // Direct-mode config lives in chrome.storage.local; its presence decides
+  // what the status area says when the local Core service is offline.
+  let directProvider = '';
+  try {
+    const data = await chrome.storage.local.get('tomihunt-llm-config');
+    directProvider = (data['tomihunt-llm-config'] as { provider?: string } | undefined)?.provider ?? '';
+  } catch {
+    // storage unavailable
+  }
+
   try {
     const health = await client.health();
     statusEl.innerHTML = `
+      <div class="row"><span>模式</span><span class="ok">完整模式</span></div>
       <div class="row"><span>Core 服务</span><span class="ok">在线</span></div>
-      <div class="row"><span>LLM Provider</span><span>${escapeHtml(health.provider)}</span></div>
-      <div class="row"><span>队列</span><span>${health.queue.active} 运行中 / ${health.queue.pending} 排队</span></div>`;
+      <div class="row"><span>LLM Provider</span><span>${escapeHtml(health.provider)}</span></div>`;
   } catch {
-    statusEl.innerHTML = `
-      <div class="row"><span>Core 服务</span><span class="down">离线</span></div>
-      <div class="row"><span>提示</span><span>运行 <code>npm run dev -w core</code></span></div>`;
+    if (directProvider) {
+      statusEl.innerHTML = `
+        <div class="row"><span>模式</span><span class="ok">直连模式</span></div>
+        <div class="row"><span>LLM Provider</span><span>${escapeHtml(directProvider)}</span></div>
+        <div class="row"><span>本地服务</span><span>不需要（进阶功能可选）</span></div>`;
+    } else {
+      statusEl.innerHTML = `
+        <div class="row"><span>状态</span><span class="down">未配置</span></div>
+        <div class="row"><span>下一步</span><span>点下方「⚙️ 设置」粘贴 API Key<br/>（无需启动任何服务）</span></div>`;
+    }
   }
 }
 
