@@ -4,6 +4,7 @@
  */
 import { loadDirectConfig, presetFor, testDirectConnection, type DirectLlmConfig } from '../direct/llm.js';
 import { syncConfigToCore } from '../core-client.js';
+import { decryptBackup, encryptBackup } from './backup-crypto.js';
 import { parseResumeFile, ResumeParseError } from './resume-parser.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -116,6 +117,8 @@ $('test').addEventListener('click', async () => {
 
 // --- Config backup: export/import (survives folder changes & reinstalls) ---
 
+const backupPassword = (): string => $('backup-password').value || 'tomihunt';
+
 $('export').addEventListener('click', async () => {
   const data = await chrome.storage.local.get([
     'tomihunt-llm-config',
@@ -123,24 +126,36 @@ $('export').addEventListener('click', async () => {
     'tomihunt-send-mode',
     'tomihunt-smart-reply',
   ]);
-  const blob = new Blob([JSON.stringify({ tomihuntBackup: 1, savedAt: new Date().toISOString(), ...data }, null, 2)], {
-    type: 'application/json',
-  });
+  const json = JSON.stringify({ tomihuntBackup: 1, savedAt: new Date().toISOString(), ...data }, null, 2);
+  // The backup contains an API key — it is AES-256-GCM encrypted with the
+  // backup password. The file on disk is never plaintext.
+  const encrypted = await encryptBackup(json, backupPassword());
+  const blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'tomihunt-backup.json';
   a.click();
   URL.revokeObjectURL(url);
-  showStatus(true, '✅ 备份文件已下载，请妥善保存（含 API Key）。');
+  showStatus(true, '✅ 备份已加密下载（密码请务必记住，丢失无法恢复）。');
 });
 
 $('import-file').addEventListener('change', async () => {
   const file = $('import-file').files?.[0];
   if (!file) return;
   try {
-    const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
-    if (parsed.tomihuntBackup !== 1) throw new Error('不是 TomiHunt 备份文件');
+    const raw = JSON.parse(await file.text()) as Record<string, unknown>;
+    let parsed: Record<string, unknown>;
+    if (raw.format === 'tomihunt-backup-encrypted') {
+      // Current format: password-encrypted (wrong password throws here)
+      const plain = await decryptBackup(raw as never, backupPassword());
+      parsed = JSON.parse(plain) as Record<string, unknown>;
+      if (parsed.tomihuntBackup !== 1) throw new Error('不是 TomiHunt 备份文件');
+    } else if (raw.tomihuntBackup === 1) {
+      parsed = raw; // legacy plaintext backup — still accepted
+    } else {
+      throw new Error('不是 TomiHunt 备份文件（也不是加密备份）');
+    }
     const cfg = parsed['tomihunt-llm-config'] as DirectLlmConfig | undefined;
     if (cfg) {
       providerEl.value = cfg.provider;

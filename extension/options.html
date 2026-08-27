@@ -99,9 +99,13 @@
       <button id="save">保存</button>
       <button id="test" class="secondary">保存并测试连接</button>
     </div>
-    <div class="row" style="margin-top:10px">
-      <button id="export" class="secondary" style="flex:1">导出配置备份</button>
-      <button id="import" class="secondary" style="flex:1">导入配置备份</button>
+    <div class="field" style="margin-top:10px">
+      <label>备份密码（导出时设置，导入时需输入相同密码）</label>
+      <input id="backup-password" type="password" placeholder="留空则使用默认密码 tomihunt" autocomplete="off" />
+    </div>
+    <div class="row">
+      <button id="export" class="secondary" style="flex:1">导出配置备份（加密）</button>
+      <button id="import" class="secondary" style="flex:1">导入配置备份（解密）</button>
       <input id="import-file" type="file" accept=".json" style="display:none" />
     </div>
     <div class="row" style="margin-top:6px">
