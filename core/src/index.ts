@@ -25,7 +25,7 @@ import type { ChatProvider, LLMConfig } from './types.js';
 /** Repo-hosted version manifest — overridable for mirrors/self-hosting. */
 const VERSION_URL =
   process.env.TOMI_VERSION_URL ??
-  'https://raw.githubusercontent.com/<your-name>/tomi-job-hunt/main/version.json';
+  'https://raw.githubusercontent.com/xxwj225-James/tomi-job-hunt/main/version.json';
 
 const CURRENT_VERSION = (
   JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }

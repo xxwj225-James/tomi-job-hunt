@@ -41,7 +41,7 @@ API Key 获取地址：
 克隆并安装依赖：
 
 ```bash
-git clone https://github.com/<your-name>/tomi-job-hunt.git
+git clone https://github.com/xxwj225-James/tomi-job-hunt.git
 cd tomi-job-hunt
 npm install
 ```

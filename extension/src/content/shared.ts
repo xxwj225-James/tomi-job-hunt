@@ -13,7 +13,7 @@ import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 export const client = new CoreClient();
 
 /** Support/donation page (affiliate links) — footer of every panel state. */
-const SUPPORT_URL = 'https://github.com/<your-name>/tomi-job-hunt/blob/main/docs/support.md';
+const SUPPORT_URL = 'https://github.com/xxwj225-James/tomi-job-hunt/blob/main/docs/support.md';
 
 /**
  * Removes elements hidden by CSS from a detached clone, so textContent stays

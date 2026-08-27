@@ -88,7 +88,7 @@ async function startCore(): Promise<void> {
 }
 
 // --- OTA version check (daily cache; unpacked installs can't self-update) ---
-const VERSION_URL = 'https://raw.githubusercontent.com/<your-name>/tomi-job-hunt/main/version.json';
+const VERSION_URL = 'https://raw.githubusercontent.com/xxwj225-James/tomi-job-hunt/main/version.json';
 const UPDATE_EL_ID = 'update-hint';
 
 async function checkVersion(): Promise<void> {
