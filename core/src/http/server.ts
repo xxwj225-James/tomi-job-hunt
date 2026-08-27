@@ -95,6 +95,7 @@ const greetingRequestSchema = z.object({
     hrName: z.string().optional(),
   }),
   resume: z.string().optional(),
+  feedback: z.string().max(500).optional(),
 });
 
 const jdWithResumeSchema = z.object({
@@ -276,7 +277,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const detail = parsed.error.issues.map((i) => i.message).join('; ');
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
-    const { jd, resume } = parsed.data;
+    const { jd, resume, feedback } = parsed.data;
     // Prefer the local resume file (md/txt/docx/pdf) unless the caller
     // passed an explicit resume.
     const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
@@ -285,7 +286,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     try {
       const result = await deps.queue.run(async () => {
         deps.ws.broadcast({ type: 'job/started', jobId });
-        return await greetJd(deps.provider, jd, effectiveResume, deps.log.child(`greet:${jobId.slice(0, 8)}`));
+        return await greetJd(deps.provider, jd, effectiveResume, deps.log.child(`greet:${jobId.slice(0, 8)}`), feedback);
       });
       deps.ws.broadcast({ type: 'job/done', jobId, result });
       return c.json(result);

@@ -36,6 +36,8 @@ export interface GreetingRequest {
     hrName?: string;
   };
   resume?: string;
+  /** User feedback on a previous pitch — regeneration guidance. */
+  feedback?: string;
 }
 
 export interface GreetingResult {

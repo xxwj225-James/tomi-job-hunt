@@ -218,6 +218,9 @@ export function showPanel(content: {
   pitch?: string;
   error?: string;
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>;
+  /** Optional feedback textarea (e.g. regeneration opinions). */
+  input?: { placeholder?: string; value?: string };
+  onInput?: (value: string) => void;
 }): void {
   const rows = content.rows.map((r) => `<div class="row">${escapeHtml(r)}</div>`).join('');
   const tagsHtml = content.tags
@@ -226,6 +229,9 @@ export function showPanel(content: {
   const pitchHtml = content.pitch ? `<div class="pitch">${escapeHtml(content.pitch)}</div>` : '';
   const spinner = content.state === 'tagging' ? '<span class="spinner"></span>' : '';
   const errorHtml = content.error ? `<div class="err">${escapeHtml(content.error)}</div>` : '';
+  const inputHtml = content.input
+    ? `<textarea class="feedback" rows="3" placeholder="${escapeHtml(content.input.placeholder ?? '')}" style="width:100%;box-sizing:border-box;margin:8px 0;padding:8px;border:1px solid #d0d5dd;border-radius:8px;font:inherit">${escapeHtml(content.input.value ?? '')}</textarea>`
+    : '';
   const actionsHtml =
     content.actions
       ?.map(
@@ -237,9 +243,13 @@ export function showPanel(content: {
   // interview) — visible placement, never injected into AI-generated text.
   const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（免费使用 · 推广返佣/打赏）</div>`;
   setPanelHtml(
-    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}<div style="margin-top:8px">${actionsHtml}</div>${supportHtml}`,
+    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}${inputHtml}<div style="margin-top:8px">${actionsHtml}</div>${supportHtml}`,
   );
   const s = ensurePanel();
+  if (content.input && content.onInput) {
+    const ta = s.querySelector('textarea.feedback') as HTMLTextAreaElement | null;
+    if (ta) ta.addEventListener('input', () => content.onInput?.(ta.value));
+  }
   for (const a of content.actions ?? []) {
     const el = s.querySelector(`[data-action="${a.label}"]`);
     if (el) el.addEventListener('click', a.onClick);
@@ -331,6 +341,7 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
         title: panelTitle,
         rows: [],
         error: `本地 Core 服务异常 (${CORE_BASE}): ${(err as Error).message}`,
+        actions: [{ label: '重试', onClick: () => void captureAndShow(ctx, panelTitle) }],
       });
     }
     return;
@@ -347,20 +358,28 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
       title: panelTitle,
       rows: [],
       error: `分析失败: ${(err as Error).message}`,
+      actions: [{ label: '重试', onClick: () => void captureAndShow(ctx, panelTitle) }],
     });
   }
 }
 
-export async function generatePitch(ctx: CapturedContext, panelTitle: string): Promise<void> {
+export async function generatePitch(
+  ctx: CapturedContext,
+  panelTitle: string,
+  feedback?: string,
+): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在生成打招呼语…'] });
   try {
-    const result: GreetingResult = await backendGreeting({
-      title: ctx.jd.title,
-      company: ctx.jd.company,
-      salaryText: ctx.jd.salaryText,
-      requirements: ctx.jd.requirements,
-      hrName: ctx.jd.hrName,
-    });
+    const result: GreetingResult = await backendGreeting(
+      {
+        title: ctx.jd.title,
+        company: ctx.jd.company,
+        salaryText: ctx.jd.salaryText,
+        requirements: ctx.jd.requirements,
+        hrName: ctx.jd.hrName,
+      },
+      feedback,
+    );
     // Handoff: 立即沟通 navigates to /web/geek/chat/* — the chat page script
     // reads the pitch back from chrome.storage.session.
     await savePitch({ pitch: result.pitch, jdTitle: ctx.jd.title, ts: Date.now() });
@@ -370,13 +389,54 @@ export async function generatePitch(ctx: CapturedContext, panelTitle: string): P
       rows,
       pitch: result.pitch,
       actions: [
-        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch), primary: true },
-        { label: '重新生成', onClick: () => void generatePitch(ctx, panelTitle) },
+        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows)), primary: true },
+        { label: '重新生成（可填意见）', onClick: () => showRegeneratePanel(ctx, panelTitle) },
+        { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
       ],
     });
   } catch (err) {
-    showPanel({ state: 'error', title: panelTitle, rows: [], error: `生成失败: ${(err as Error).message}` });
+    showPanel({
+      state: 'error',
+      title: panelTitle,
+      rows: [],
+      error: `生成失败: ${(err as Error).message}`,
+      actions: [
+        { label: '重试', onClick: () => void generatePitch(ctx, panelTitle, feedback) },
+        { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
+      ],
+    });
   }
+
+  function showPitchPanel(result: GreetingResult, rows: string[]): void {
+    showPanel({
+      title: panelTitle,
+      rows,
+      pitch: result.pitch,
+      actions: [
+        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows)), primary: true },
+        { label: '重新生成（可填意见）', onClick: () => showRegeneratePanel(ctx, panelTitle) },
+        { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
+      ],
+    });
+  }
+}
+
+/** Regeneration with optional feedback — textarea + two paths. */
+function showRegeneratePanel(ctx: CapturedContext, panelTitle: string): void {
+  let feedback = '';
+  showPanel({
+    title: panelTitle,
+    rows: ['对上一版不满意？可填写修改意见（可选），然后重新生成：'],
+    input: { placeholder: '例：语气更简洁 / 突出 K8s 经验 / 不要提加班 / 换个结尾提问' },
+    onInput: (v) => {
+      feedback = v;
+    },
+    actions: [
+      { label: '按意见重新生成', onClick: () => void generatePitch(ctx, panelTitle, feedback.trim() || undefined), primary: true },
+      { label: '直接重新生成', onClick: () => void generatePitch(ctx, panelTitle) },
+      { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
+    ],
+  });
 }
 
 // --- Send mode (manual confirm vs auto-send) ---
@@ -463,18 +523,80 @@ export function sendChatMessage(): boolean {
   return pressEnterOnInput() || clickSendButton();
 }
 
+// 立即沟通/继续沟通 button candidates — clicking one opens the chat window
+// (zhipin navigates to /web/geek/chat, liepin opens its chat panel).
+const OPEN_CHAT_SELECTORS = [
+  'a.op-btn.op-btn-chat',
+  '.op-btn-chat',
+  'a[ka*="chat"]',
+  '[class*="start-chat"]',
+  'button[class*="chat-now"]',
+  '.btn-start-chat',
+];
+
 /**
  * Shared fill routine. When autoSend is undefined the stored send mode
  * decides (default: manual — fill only, user clicks send themselves).
+ * If no chat input exists yet, tries to OPEN the chat window itself by
+ * clicking the site's 立即沟通 button, then retries filling.
  */
-export async function fillPitch(pitch: string, autoSend?: boolean): Promise<void> {
+export async function fillPitch(
+  pitch: string,
+  autoSend?: boolean,
+  back?: () => void,
+): Promise<void> {
   const shouldAuto = autoSend ?? ((await getSendMode()) === 'auto');
   const filled = fillChatBox(pitch, CHAT_INPUT_SELECTORS);
   if (!filled) {
+    const opened = clickOpenChatButton();
+    if (opened) {
+      // Chat window opening: zhipin SPA-navigates (the chat-page script takes
+      // over with the stored pitch) or liepin opens a panel in place — poll
+      // briefly and fill if the input appears here.
+      showPanel({
+        state: 'tagging',
+        title: 'TomiHunt',
+        rows: ['已帮你点击「立即沟通」打开聊天窗口…'],
+        pitch,
+      });
+      for (let i = 0; i < 6; i += 1) {
+        await new Promise((r) => setTimeout(r, 800));
+        if (fillChatBox(pitch, CHAT_INPUT_SELECTORS)) {
+          if (shouldAuto) {
+            await new Promise((r) => setTimeout(r, 600));
+            const sent = sendChatMessage();
+            showPanel({
+              title: 'TomiHunt',
+              rows: sent ? ['✅ 已自动发送。'] : ['已填入 — 请手动按 Enter 发送（内容已保留）。'],
+              pitch,
+              actions: back ? [{ label: '返回', onClick: back }] : [],
+            });
+          } else {
+            showPanel({
+              title: 'TomiHunt',
+              rows: ['✅ 已填入聊天框，确认后自行点击发送。'],
+              pitch,
+              actions: back ? [{ label: '返回', onClick: back }] : [],
+            });
+          }
+          return;
+        }
+      }
+      // zhipin navigated away — the chat page script handles it; this page
+      // may be gone already. Leave a graceful note + back path.
+      showPanel({
+        title: 'TomiHunt',
+        rows: ['已打开聊天窗口。若跳转到聊天页，话术会自动带过去，点击面板「填入聊天框」即可。'],
+        pitch,
+        actions: back ? [{ label: '返回', onClick: back }] : [],
+      });
+      return;
+    }
     showPanel({
       title: 'TomiHunt',
-      rows: ['未找到聊天框输入区 — 请先点击「立即沟通」打开聊天窗口，再试一次。'],
+      rows: ['未找到聊天框输入区，页面上也没找到「立即沟通」按钮 — 请手动打开聊天窗口后再点一次。'],
       pitch,
+      actions: back ? [{ label: '返回', onClick: back }] : [],
     });
     return;
   }
@@ -488,6 +610,7 @@ export async function fillPitch(pitch: string, autoSend?: boolean): Promise<void
         ? ['✅ 已自动发送。如需调整，可再次生成。']
         : ['已填入但未找到发送按钮 — 请手动按 Enter 发送（内容已保留）。'],
       pitch,
+      actions: back ? [{ label: '返回', onClick: back }] : [],
     });
     return;
   }
@@ -495,7 +618,21 @@ export async function fillPitch(pitch: string, autoSend?: boolean): Promise<void
     title: 'TomiHunt',
     rows: ['✅ 已填入聊天框，确认后自行点击发送。'],
     pitch,
+    actions: back ? [{ label: '返回', onClick: back }] : [],
   });
+}
+
+/** Clicks the first visible 立即沟通/继续沟通 button on the page. */
+function clickOpenChatButton(): boolean {
+  for (const sel of OPEN_CHAT_SELECTORS) {
+    for (const el of document.querySelectorAll<HTMLElement>(sel)) {
+      if (el.textContent?.includes('沟通')) {
+        el.click();
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // --- Phase 2/3 panel actions: match scoring + interview prep ---

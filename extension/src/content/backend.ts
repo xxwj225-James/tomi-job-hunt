@@ -62,14 +62,14 @@ export async function backendTag(jd: JdLike): Promise<JdTags> {
   return directTagJd(jd);
 }
 
-export async function backendGreeting(jd: JdLike): Promise<GreetingResult> {
+export async function backendGreeting(jd: JdLike, feedback?: string): Promise<GreetingResult> {
   // The extension's stored resume wins; Core falls back to its own resume.md
   // only when the extension has none.
   const resume = await loadResume();
   if ((await detectBackend()) === 'core') {
-    return client.greeting({ jd: { ...jd, hrName: jd.hrName }, resume });
+    return client.greeting({ jd: { ...jd, hrName: jd.hrName }, resume, feedback });
   }
-  return directGreeting(jd, resume);
+  return directGreeting(jd, resume, feedback);
 }
 
 export async function backendMatch(jd: JdLike) {

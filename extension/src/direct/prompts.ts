@@ -88,10 +88,13 @@ export async function directGreeting(jd: {
   salaryText: string;
   requirements: string;
   hrName?: string;
-}, resume?: string): Promise<{ pitch: string; warning?: string }> {
+}, resume?: string, feedback?: string): Promise<{ pitch: string; warning?: string }> {
   const resumePart = resume
     ? `\n\n求职者简历（Markdown 节选）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未配置简历，仅基于 JD 生成，用通用匹配话术）';
+  const feedbackPart = feedback
+    ? `\n\n用户对上一版打招呼语的修改意见（必须严格遵循）：\n${feedback.slice(0, 500)}`
+    : '';
   const prompt = `你是求职者的招聘沟通助手。请为以下岗位生成一条 Boss 直聘「打招呼语」。
 
 岗位：${jd.title}
@@ -105,7 +108,7 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
 2. 直击 JD 的核心硬性要求，用简历中真实匹配的经历做证据；没有简历时突出通用的核心匹配点
 3. 不提学历短板等减分项；不吹捧公司
 4. 结尾抛出具体问题或行动
-5. 只输出打招呼语本身，不要任何解释、标题或引号`;
+5. 只输出打招呼语本身，不要任何解释、标题或引号${feedbackPart}`;
   const result = await directChat([{ role: 'user', content: prompt }]);
   return {
     pitch: result.text.trim().slice(0, 120),

@@ -24,10 +24,13 @@ export interface GreetingResult {
 }
 
 /** Pure prompt builder — unit-testable. */
-export function buildGreetingPrompt(jd: GreetingJd, resume?: string): string {
+export function buildGreetingPrompt(jd: GreetingJd, resume?: string, feedback?: string): string {
   const resumePart = resume
     ? `\n\n求职者简历（Markdown 节选）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未配置简历，仅基于 JD 生成，用通用匹配话术）';
+  const feedbackPart = feedback
+    ? `\n\n用户对上一版打招呼语的修改意见（必须严格遵循）：\n${feedback.slice(0, 500)}`
+    : '';
   return `你是求职者的招聘沟通助手。请为以下岗位生成一条 Boss 直聘「打招呼语」。
 
 岗位：${jd.title}
@@ -41,7 +44,7 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
 2. 直击 JD 的核心硬性要求，用简历中真实匹配的经历做证据（如「做过 xx 亿级订单系统」「主导过 xx」）；没有简历时突出通用的核心匹配点
 3. 不提学历短板等减分项；不吹捧公司
 4. 结尾抛出具体问题或行动（如「方便看下我的简历吗？」）
-5. 只输出打招呼语本身，不要任何解释、标题或引号`;
+5. 只输出打招呼语本身，不要任何解释、标题或引号${feedbackPart}`;
 }
 
 export async function greetJd(
@@ -49,9 +52,10 @@ export async function greetJd(
   jd: GreetingJd,
   resume: string | undefined,
   log: Logger,
+  feedback?: string,
 ): Promise<GreetingResult> {
   const req: ChatRequest = {
-    messages: [{ role: 'user', content: buildGreetingPrompt(jd, resume) }],
+    messages: [{ role: 'user', content: buildGreetingPrompt(jd, resume, feedback) }],
     temperature: 0.7,
   };
   const result = await provider.chat(req);
