@@ -4,7 +4,7 @@
  * without the local Core service. Kept intentionally simple: same prompts,
  * same zod-free validation (manual shape checks).
  */
-import type { JdTags } from '../types.js';
+import type { JdTags, ReplyResult, ReplyTurn } from '../types.js';
 import { directChat } from './llm.js';
 
 // --- JSON extraction (same algorithm as core/src/jd/tagger.ts) ---
@@ -164,6 +164,44 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
     gaps: Array.isArray(raw.gaps) ? (raw.gaps as string[]) : [],
     risks: Array.isArray(raw.risks) ? (raw.risks as string[]) : [],
   };
+}
+
+// --- Smart reply (port of core reply.ts) ---
+
+export async function directReply(
+  jd: { title: string; company: string; salaryText: string; requirements: string },
+  resume: string | undefined,
+  history: ReplyTurn[],
+  incoming: string,
+): Promise<ReplyResult> {
+  const resumePart = resume
+    ? `\n\n求职者简历（Markdown 节选）：\n${resume.slice(0, 4000)}`
+    : '\n\n（求职者未提供简历，按通用求职者身份回复）';
+  const historyPart =
+    history.length > 0
+      ? `\n\n最近对话（时间顺序）：\n${history
+          .slice(-8)
+          .map((t) => `${t.speaker === 'hr' ? '[对方]' : '[我]'} ${t.content.slice(0, 300)}`)
+          .join('\n')}`
+      : '\n\n（这是第一次对话）';
+  const prompt = `你是正在求职的候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。
+
+岗位：${jd.title}
+公司：${jd.company}
+薪资：${jd.salaryText || '未标注'}
+任职要求：
+${jd.requirements.slice(0, 3000) || '未提供'}${resumePart}${historyPart}
+
+对方最新消息：
+${incoming.slice(0, 1000)}
+
+要求：
+1. 20~80 字，中文，口语化、专业
+2. 基于简历中的真实经历回答对方的问题；不确定的信息不编造
+3. 顺着推进对话：回答对方问题、表达意向，或提出下一步
+4. 只输出回复内容本身，不要引号、不要任何解释`;
+  const result = await directChat([{ role: 'user', content: prompt }]);
+  return { reply: result.text.trim().slice(0, 200) };
 }
 
 // --- Interview prep (port of core interview.ts) ---

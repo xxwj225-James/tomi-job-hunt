@@ -7,9 +7,12 @@
  * send mode in the options page. The chat box is a contenteditable div,
  * not a textarea (verified via live research, 2026-08).
  */
-import { fillPitch, getSendMode, showPanel } from './shared.js';
+import { fillPitch, getSendMode, showPanel, watchChatForReplies } from './shared.js';
 
 function main(): void {
+  // Smart replies: incoming HR messages draft a reply into the chat box
+  // (the user still sends it themselves). Works in manual and auto modes.
+  watchChatForReplies();
   void (async () => {
     const { loadPitch } = await import('./shared.js');
     const stored = await loadPitch();

@@ -40,6 +40,22 @@ export interface GreetingRequest {
   feedback?: string;
 }
 
+export interface ReplyTurn {
+  speaker: 'hr' | 'me';
+  content: string;
+}
+
+export interface ReplyRequest {
+  jd: { title: string; company: string; salaryText: string; requirements: string };
+  resume?: string;
+  history: ReplyTurn[];
+  incoming: string;
+}
+
+export interface ReplyResult {
+  reply: string;
+}
+
 export interface GreetingResult {
   pitch: string;
   /** Set when resume.md was not configured and the pitch is JD-only. */

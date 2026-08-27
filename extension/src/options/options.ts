@@ -22,6 +22,7 @@ const baseUrlHintEl = $<HTMLDivElement>('baseUrl-hint');
 const resumeEl = $<HTMLTextAreaElement>('resume');
 const resumeFileEl = $<HTMLInputElement>('resume-file');
 const sendModeEl = $<HTMLSelectElement>('sendMode');
+const smartReplyEl = $<HTMLSelectElement>('smartReply');
 
 function showStatus(ok: boolean, message: string): void {
   statusEl.textContent = message;
@@ -82,6 +83,7 @@ $('save').addEventListener('click', async () => {
   await chrome.storage.local.set({
     'tomihunt-llm-config': cfg,
     'tomihunt-send-mode': sendModeEl.value === 'auto' ? 'auto' : 'manual',
+    'tomihunt-smart-reply': smartReplyEl.value === 'off' ? 'off' : 'on',
   });
   if (resumeEl.value.trim()) {
     await chrome.storage.local.set({ 'tomihunt-resume': resumeEl.value.trim() });
@@ -119,12 +121,15 @@ void loadDirectConfig().then((cfg) => {
   baseUrlEl.value = cfg.baseUrl ?? '';
   updateModelHint();
 });
-void chrome.storage.local.get(['tomihunt-resume', 'tomihunt-send-mode']).then((data) => {
+void chrome.storage.local.get(['tomihunt-resume', 'tomihunt-send-mode', 'tomihunt-smart-reply']).then((data) => {
   if (typeof data['tomihunt-resume'] === 'string') {
     resumeEl.value = data['tomihunt-resume'] as string;
   }
   if (data['tomihunt-send-mode'] === 'auto') {
     sendModeEl.value = 'auto';
+  }
+  if (data['tomihunt-smart-reply'] === 'off') {
+    smartReplyEl.value = 'off';
   }
 });
 updateModelHint();

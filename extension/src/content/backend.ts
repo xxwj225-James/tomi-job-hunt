@@ -7,9 +7,9 @@
  * from the extension, API key configured in the options page).
  */
 import { CORE_BASE as CORE_BASE_FALLBACK, getCoreBase, CoreClient } from '../core-client.js';
-import { directGreeting, directInterviewPrep, directMatch, directTagJd } from '../direct/prompts.js';
+import { directGreeting, directInterviewPrep, directMatch, directReply, directTagJd } from '../direct/prompts.js';
 import { loadResume } from '../direct/resume.js';
-import type { GreetingResult, JdTags } from '../types.js';
+import type { GreetingResult, JdTags, ReplyRequest, ReplyResult } from '../types.js';
 
 export type Backend = 'core' | 'direct';
 
@@ -78,6 +78,14 @@ export async function backendMatch(jd: JdLike) {
     return corePost<Record<string, unknown>>('/v1/match', { jd, resume });
   }
   return directMatch(jd, resume);
+}
+
+export async function backendReply(req: ReplyRequest): Promise<ReplyResult> {
+  if ((await detectBackend()) === 'core') {
+    const resume = req.resume ?? (await loadResume());
+    return corePost<ReplyResult>('/v1/reply', { ...req, resume });
+  }
+  return directReply(req.jd, req.resume ?? (await loadResume()), req.history, req.incoming);
 }
 
 export async function backendInterview(jd: JdLike) {

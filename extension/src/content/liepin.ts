@@ -14,7 +14,7 @@
  *      .job-intro-container, .recruiter-container …) plus the legacy
  *      selectors from the pre-2026 build, so older pages still work.
  */
-import { captureAndShow, pickLongText, pickText, showPanel } from './shared.js';
+import { captureAndShow, pickLongText, pickText, showPanel, watchChatForReplies } from './shared.js';
 import type { JdCaptureInput } from '../types.js';
 
 export interface LiepinJd {
@@ -202,6 +202,8 @@ export async function waitForJd(
 }
 
 async function main(): Promise<void> {
+  // Smart replies work in liepin's in-page chat panel too.
+  watchChatForReplies();
   const jd = await waitForJd(document);
   if (!jd) return;
 

@@ -34,6 +34,7 @@ import { scoreJd } from '../jd/match.js';
 import { semanticSearch } from '../jd/semantic-search.js';
 import { mdToHtml, tailorResume } from '../jd/tailor.js';
 import { interviewPrep } from '../jd/interview.js';
+import { replyToHr, type ReplyTurn } from '../jd/reply.js';
 import { Board, BOARD_STATUSES } from '../jd/board.js';
 import { draftColdEmail, huntCompanies } from '../hunt/reverse.js';
 import type { UpdateCheck } from '../version.js';
@@ -111,6 +112,26 @@ const jdWithResumeSchema = z.object({
 
 const semanticSearchSchema = z.object({
   query: z.string().min(2).max(200),
+});
+
+const replySchema = z.object({
+  jd: z.object({
+    title: z.string().min(1),
+    company: z.string().min(1),
+    salaryText: z.string().default(''),
+    requirements: z.string().default(''),
+  }),
+  resume: z.string().optional(),
+  history: z
+    .array(
+      z.object({
+        speaker: z.enum(['hr', 'me']),
+        content: z.string().max(2000),
+      }),
+    )
+    .max(20)
+    .default([]),
+  incoming: z.string().min(1).max(2000),
 });
 
 const exportSchema = z.object({
@@ -438,6 +459,29 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     }
     const entry = deps.board.add(parsed.data);
     return c.json(entry, 201);
+  });
+
+  // --- Smart reply (HR message → draft, user sends) ---
+
+  app.post('/v1/reply', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = replySchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume, history, incoming } = parsed.data;
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
+    try {
+      const result = await deps.queue.run(() =>
+        replyToHr(deps.provider, jd, effectiveResume, history as ReplyTurn[], incoming, deps.log.child('reply')),
+      );
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
   });
 
   // --- Phase 6: reverse job hunting ---

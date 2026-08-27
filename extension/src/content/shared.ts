@@ -7,7 +7,7 @@
  * - the chat box is a contenteditable div (NOT a textarea) on /web/geek/chat
  */
 import { CoreClient, CORE_BASE, formatTags, getCoreBase } from '../core-client.js';
-import { backendGreeting, backendInterview, backendMatch, backendTag, detectBackend } from './backend.js';
+import { backendGreeting, backendInterview, backendMatch, backendReply, backendTag, detectBackend } from './backend.js';
 import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 
 export const client = new CoreClient();
@@ -117,6 +117,137 @@ export function fillChatBox(text: string, selectors: string[]): boolean {
   return false;
 }
 
+// --- Incoming HR message observation (smart reply trigger) ---
+
+// Candidate selectors for chat message items (both sites' markup drifts).
+const MSG_SELECTORS = [
+  '.chat-record .message',
+  '[class*="chat-message"]',
+  '[class*="message-item"]',
+  '.im-message-item',
+  '.msg-item',
+  '[class*="msg-content"]',
+];
+
+/** Heuristic side classification: right/self-marked = mine, else theirs. */
+function isMyMessage(el: Element): boolean {
+  const cls = typeof el.className === 'string' ? el.className : '';
+  if (/(^|[ _-])(self|right|mine|me)([ _-]|$)/i.test(cls)) return true;
+  if (/(^|[ _-])(left|from|other)([ _-]|$)/i.test(cls)) return false;
+  const style = (el as HTMLElement).style;
+  if (style.cssFloat === 'right' || style.textAlign === 'right') return true;
+  return false;
+}
+
+/**
+ * Watches the chat area for NEW incoming messages (from the other side).
+ * Dedupes by content; fires onIncoming(text) once per new message.
+ * Returns a stop function.
+ */
+export function observeChatMessages(onIncoming: (text: string) => void): () => void {
+  const seen = new Set<string>();
+  const consider = (el: Element): void => {
+    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length < 2) return;
+    if (seen.has(text)) return;
+    if (isMyMessage(el)) return; // my own messages never trigger replies
+    seen.add(text);
+    onIncoming(text);
+  };
+  // Existing messages first (page load mid-conversation)
+  for (const sel of MSG_SELECTORS) {
+    for (const el of document.querySelectorAll(sel)) consider(el);
+  }
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        const el = node.matches(MSG_SELECTORS.join(',')) ? node : node.querySelector(MSG_SELECTORS.join(','));
+        if (el) consider(el);
+        if (node.matches(MSG_SELECTORS.join(','))) consider(node);
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  return () => observer.disconnect();
+}
+
+// --- Smart reply: HR message → AI draft → fill (user sends) ---
+
+const LAST_JD_KEY = 'tomihunt-last-jd';
+
+export async function saveLastJd(jd: JdCaptureInput): Promise<void> {
+  try {
+    await chrome.storage.session.set({ [LAST_JD_KEY]: jd });
+  } catch {
+    // session storage unavailable — reply falls back to generic context
+  }
+}
+
+async function loadLastJd(): Promise<JdCaptureInput | null> {
+  try {
+    const data = await chrome.storage.session.get(LAST_JD_KEY);
+    return (data[LAST_JD_KEY] as JdCaptureInput | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rolling conversation history observed on this page (for reply context). */
+const replyHistory: Array<{ speaker: 'hr' | 'me'; content: string }> = [];
+let lastReplyAt = 0;
+const REPLY_COOLDOWN_MS = 10_000;
+
+async function smartReplyEnabled(): Promise<boolean> {
+  try {
+    const data = await chrome.storage.local.get('tomihunt-smart-reply');
+    return data['tomihunt-smart-reply'] !== 'off';
+  } catch {
+    return true; // default on
+  }
+}
+
+/**
+ * Reacts to an incoming HR message: drafts a reply (JD + resume + recent
+ * history) and fills it into the chat box — the user always sends it.
+ */
+export async function handleIncomingMessage(text: string): Promise<void> {
+  if (!(await smartReplyEnabled())) return;
+  const now = Date.now();
+  if (now - lastReplyAt < REPLY_COOLDOWN_MS) return;
+  lastReplyAt = now;
+
+  replyHistory.push({ speaker: 'hr', content: text });
+  const jd = await loadLastJd();
+  const resume = await loadResumeFromExtension();
+  try {
+    const { reply } = await backendReply({
+      jd: jd ?? { title: '未知岗位', company: '未知公司', salaryText: '', requirements: '' },
+      resume: resume ?? undefined,
+      history: replyHistory.slice(-8),
+      incoming: text,
+    });
+    replyHistory.push({ speaker: 'me', content: reply });
+    const filled = fillChatBox(reply, CHAT_INPUT_SELECTORS);
+    showPanel({
+      title: 'TomiHunt · 智能回复',
+      rows: filled
+        ? ['已根据对方消息拟好回复并填入聊天框', '确认内容后自行点击发送。']
+        : ['已拟好回复，但未找到聊天输入框（请先打开聊天窗口）：'],
+      pitch: reply,
+    });
+  } catch {
+    // generation failure — stay silent, the user can reply manually
+  }
+}
+
+/** Wires the observer on chat-capable pages. */
+export function watchChatForReplies(): void {
+  observeChatMessages((text) => {
+    void handleIncomingMessage(text);
+  });
+}
+
 // --- Pitch handoff between job detail page and the SPA chat page ---
 // 立即沟通 navigates to /web/geek/chat/* — a different route with a different
 // content script. The generated pitch travels via chrome.storage.session.
@@ -132,6 +263,15 @@ export async function savePitch(pitch: StoredPitch): Promise<void> {
     await chrome.storage.session.set({ 'tomihunt-pitch': pitch });
   } catch {
     // storage unavailable — pitch stays on the current page only
+  }
+}
+
+async function loadResumeFromExtension(): Promise<string | undefined> {
+  try {
+    const data = await chrome.storage.local.get('tomihunt-resume');
+    return (data['tomihunt-resume'] as string | undefined)?.trim() || undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -309,6 +449,7 @@ export async function captureAndShow(
     showTaggedPanel(ctx, panelTitle);
     return;
   }
+  await saveLastJd(ctx.jd);
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在导入并分析 JD…'] });
   const backend = await detectBackend();
 
