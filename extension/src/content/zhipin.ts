@@ -9,7 +9,7 @@
  *   2. DOM fallback with current selectors (`.job-detail-header .job-name` …)
  *      plus legacy candidates; hidden interference words stripped in shared.ts
  */
-import { captureAndShow, pickLongText, pickText } from './shared.js';
+import { captureAndShow, pickLongText, pickText, showPanel } from './shared.js';
 import type { JdCaptureInput } from '../types.js';
 
 export interface ZhipinJd {
@@ -91,21 +91,57 @@ export function extractZhipinJdDom(doc: Document): ZhipinJd | null {
   return { title, company, salaryText, requirements, hrName };
 }
 
+// --- API rate limiting (Boss直聘 risk control, learned the hard way) ---
+// Real users request job/detail.json ONCE per page view. Polling it every
+// few seconds looks like a bot and triggers 账号异常访问行为 verification.
+// Rules: DOM-only extraction while polling; at most one API fetch per
+// 15 seconds; each JD's result is cached for the session.
+let lastApiFetchAt = 0;
+const API_MIN_INTERVAL_MS = 15_000;
+const apiCache = new Map<string, ZhipinJd>();
+
 export async function extractZhipinJd(doc: Document): Promise<ZhipinJd | null> {
+  return extractZhipinJdGuarded(doc, false);
+}
+
+/** DOM-only extraction — zero network, safe to call on every poll tick. */
+export function extractZhipinJdDomOnly(doc: Document): ZhipinJd | null {
+  return extractZhipinJdDom(doc);
+}
+
+async function extractZhipinJdGuarded(doc: Document, allowApi: boolean): Promise<ZhipinJd | null> {
+  const domJd = extractZhipinJdDom(doc);
+  if (!allowApi || !domJd) return domJd;
+
+  // Session cache first: the same JD never hits the API twice.
+  const cacheKey = `${domJd.title}|${domJd.company}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached) return cached;
+
+  // Hard rate limit: at most one fetch per API_MIN_INTERVAL_MS.
+  if (Date.now() - lastApiFetchAt < API_MIN_INTERVAL_MS) return domJd;
+
   const jid = jidFromUrl(doc.location?.href ?? '') ?? jidFromDom(doc);
   if (jid) {
+    lastApiFetchAt = Date.now();
     try {
       const resp = await fetch(`${DETAIL_API}?jid=${jid}&lid=&securityId=`, { credentials: 'include' });
       if (resp.ok) {
         const apiJd = parseWapiDetail(await resp.json());
-        if (apiJd && apiJd.requirements) return apiJd;
-        if (apiJd) return { ...apiJd, ...extractZhipinJdDom(doc), requirements: extractZhipinJdDom(doc)?.requirements || apiJd.requirements };
+        const merged: ZhipinJd | null =
+          apiJd && apiJd.requirements
+            ? apiJd
+            : apiJd
+              ? { ...apiJd, ...domJd, requirements: domJd.requirements || apiJd.requirements }
+              : domJd;
+        if (merged) apiCache.set(cacheKey, merged);
+        return merged;
       }
     } catch {
       // API unavailable → DOM fallback below
     }
   }
-  return extractZhipinJdDom(doc);
+  return domJd;
 }
 
 function toInput(jd: ZhipinJd): JdCaptureInput {
@@ -159,25 +195,42 @@ async function main(): Promise<void> {
 
   // SPA surfaces (导航职位列表 /web/geek/jobs、首页直开的 JD、公司招聘页
   // gongsi/job/*): a JD detail opens in the same page WITHOUT a URL change.
-  // Watch the DOM; only analyze when a detail view is actually open, and
-  // re-analyze whenever the visible JD's identity changes.
+  // SAFEST DESIGN: the DOM watch is zero-network — it only detects the
+  // opened detail and offers a 分析此岗位 button. The API fetch happens
+  // ONLY when the user clicks (one request per JD, rate-limited + cached).
   let activeKey: string | null = null;
   const poll = async (): Promise<void> => {
     if (!hasDetailMarker(document)) return; // no detail open (list / home)
-    const jd = await extractZhipinJd(document);
-    if (!jd) return;
-    const key = `${jd.title}|${jd.company}`;
-    if (key === activeKey) return; // same JD still on screen
+    const domJd = extractZhipinJdDomOnly(document);
+    if (!domJd) return;
+    const key = `${domJd.title}|${domJd.company}`;
+    if (key === activeKey) return; // same JD still on screen — nothing to do
     activeKey = key;
-    const ctx = { jd: toInput(jd) };
-    void captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
+    const ctx = { jd: toInput(domJd) };
+    showPanel({
+      title: 'TomiHunt',
+      rows: [`检测到岗位：${domJd.title} @ ${domJd.company}`, domJd.salaryText ? `薪资：${domJd.salaryText}` : ''],
+      actions: [
+        {
+          label: '🤖 分析此岗位',
+          onClick: () => {
+            void (async () => {
+              const jd = await extractZhipinJdGuarded(document, true);
+              ctx.jd = toInput(jd);
+              await captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
+            })();
+          },
+          primary: true,
+        },
+      ],
+    });
   };
   let ticks = 0;
   const timer = setInterval(() => {
     ticks += 1;
-    if (ticks > 300) clearInterval(timer); // ~10 min lifetime
+    if (ticks > 200) clearInterval(timer); // ~10 min lifetime
     void poll();
-  }, 2000);
+  }, 3000);
   void poll();
 }
 
