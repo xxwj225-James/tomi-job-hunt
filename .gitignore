@@ -24,3 +24,4 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+release/
