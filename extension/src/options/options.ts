@@ -15,7 +15,6 @@ const providerEl = $<HTMLSelectElement>('provider');
 const baseUrlEl = $<HTMLInputElement>('baseUrl');
 const modelEl = $<HTMLInputElement>('model');
 const apiKeyEl = $<HTMLInputElement>('apiKey');
-const thinkingEl = $<HTMLInputElement>('thinking');
 const statusEl = $<HTMLDivElement>('status');
 const modelHintEl = $<HTMLDivElement>('model-hint');
 const baseUrlHintEl = $<HTMLDivElement>('baseUrl-hint');
@@ -53,7 +52,7 @@ async function buildConfig(): Promise<DirectLlmConfig> {
     model: modelEl.value.trim() || preset?.defaultModel || '',
     apiKey: apiKeyEl.value.trim(),
     baseUrl: baseUrlEl.value.trim() || undefined,
-    thinking: thinkingEl.checked,
+    // thinking mode stays internal (off = cheaper, stable JSON) — not user-facing
   };
   return cfg;
 }
@@ -107,7 +106,6 @@ void loadDirectConfig().then((cfg) => {
   modelEl.value = cfg.model;
   apiKeyEl.value = cfg.apiKey;
   baseUrlEl.value = cfg.baseUrl ?? '';
-  thinkingEl.checked = cfg.thinking === true;
   updateModelHint();
 });
 void chrome.storage.local.get(['tomihunt-resume', 'tomihunt-send-mode']).then((data) => {
