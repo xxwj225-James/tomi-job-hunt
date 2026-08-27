@@ -9,13 +9,13 @@ TomiHunt 是免费开源的本地工具（MIT 协议），没有广告、没有�
 
 ### 阿里云
 
-- 推广链接：[点击注册/购买阿里云](<YOUR_ALIYUN_PROMO_LINK>)
+- 推广链接：[https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6](https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6)
+- 推广码：`x4jbzcb6`（注册/购买时填写）
 - 推荐场景：使用 **Qwen（通义千问）** 模型需要阿里云百炼账号；部署 Phase 5C 情报聚合 Worker 也可用阿里云函数计算
-- 推广码：`<YOUR_ALIYUN_PROMO_CODE>`（注册时填写）
 
-### 腾讯云
+### 腾讯云（国内站）
 
-- 推广链接：[点击注册/购买腾讯云](<YOUR_TENCENT_PROMO_LINK>)
+- 推广链接：[https://curl.qcloud.com/9QREcs1T](https://curl.qcloud.com/9QREcs1T)
 - 推荐场景：云服务器、轻量应用服务器（如需远程部署 Core 服务）
 
 ## 大模型 API 平台邀请
@@ -28,8 +28,8 @@ TomiHunt 是免费开源的本地工具（MIT 协议），没有广告、没有�
 
 ## 打赏
 
-- GitHub Sponsors：[<YOUR_GITHUB_SPONSORS_URL>](<YOUR_GITHUB_SPONSORS_URL>)
-- 爱发电：[<YOUR_AFDIAN_URL>](<YOUR_AFDIAN_URL>)
+- 爱发电：[https://afdian.com/a/jameswu](https://afdian.com/a/jameswu)
+- GitHub Sponsors：`<YOUR_GITHUB_SPONSORS_URL>`（可选，待补充）
 
 ## 其他支持方式
 
