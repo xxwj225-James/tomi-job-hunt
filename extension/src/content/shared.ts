@@ -286,9 +286,32 @@ export async function captureAndShow(ctx: CapturedContext, panelTitle: string): 
     try {
       const { jobUid, taggingJobId } = await client.captureJd(ctx.jd);
       ctx.jobUid = jobUid;
-      showPanel({ state: 'tagging', title: panelTitle, rows: ['已导入，等待 AI 结构化标签…'] });
+      // Show the JD summary immediately + a ticking wait time, so the wait
+      // never feels stuck (claude-code engine takes 30-60s; API providers 2-5s).
+      const startedAt = Date.now();
+      let settled = false;
+      const tick = (): void => {
+        if (settled) return;
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        showPanel({
+          state: 'tagging',
+          title: panelTitle,
+          rows: [
+            `已导入：${ctx.jd.title} @ ${ctx.jd.company}`,
+            ctx.jd.salaryText ? `薪资：${ctx.jd.salaryText}` : '',
+            `AI 结构化分析中…已等待 ${elapsed}s`,
+            elapsed >= 15
+              ? '较慢？把设置页服务商换成 DeepSeek / Qwen 只需 2-5 秒（Claude Code 引擎需 30-60 秒）。'
+              : '',
+          ].filter(Boolean),
+        });
+      };
+      tick();
+      const timer = setInterval(tick, 1000);
       client.watch((event) => {
         if (event.type === 'jd/tagged' && event.jobId === taggingJobId) {
+          settled = true;
+          clearInterval(timer);
           ctx.tags = event.tags;
           if (event.tags) {
             showTaggedPanel(ctx, panelTitle);

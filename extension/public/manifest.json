@@ -31,7 +31,7 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.liepin.com/job/*"],
+      "matches": ["https://www.liepin.com/*"],
       "js": ["content/liepin.js"],
       "run_at": "document_idle"
     }

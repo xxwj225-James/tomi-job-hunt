@@ -8,6 +8,7 @@
  */
 import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
+import { ChatProviderError } from '../llm/chat-provider.js';
 import { jdTagsSchema, type JdTags } from './schema.js';
 
 const TAG_SYSTEM_PROMPT =
@@ -167,6 +168,10 @@ export async function tagJdWithRetry(
   try {
     return await tagJd(provider, jd, log);
   } catch (err) {
+    // Provider/network errors won't improve on a second call — retrying only
+    // doubles the wait (each claude-code call costs 30s+). Retry only when
+    // the failure was a parse/validation flake.
+    if (err instanceof ChatProviderError) throw err;
     log.warn(`tagger: first attempt failed (${(err as Error).message}), retrying once`);
     return await tagJd(provider, jd, log);
   }
