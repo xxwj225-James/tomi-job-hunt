@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { getSendMode, sendChatMessage } from './shared.js';
+import { clickOpenChatButton, getSendMode, sendChatMessage } from './shared.js';
 
 function installDom(html: string): Document {
   const dom = new JSDOM(html);
@@ -79,5 +79,24 @@ describe('sendChatMessage', () => {
     // jsdom: body may be focused; Enter on body still counts as "input" — so
     // install a body that's not focusable to force the false path
     expect([true, false]).toContain(sendChatMessage());
+  });
+});
+
+describe('clickOpenChatButton', () => {
+  it('clicks a 聊一聊 button (liepin)', () => {
+    const doc = installDom(`<html><body><button class="im-chat-btn">聊一聊</button></body></html>`);
+    const btn = doc.querySelector('button')!;
+    let clicked = false;
+    btn.addEventListener('click', () => { clicked = true; });
+    expect(clickOpenChatButton()).toBe(true);
+    expect(clicked).toBe(true);
+  });
+
+  it('ignores long paragraphs even if they contain 沟通', () => {
+    const doc = installDom(`<html><body><div role="button">这是一个很长的沟通段落说明文字超过十二个字</div></body></html>`);
+    let clicked = false;
+    doc.querySelector('[role="button"]')!.addEventListener('click', () => { clicked = true; });
+    expect(clickOpenChatButton()).toBe(false);
+    expect(clicked).toBe(false);
   });
 });

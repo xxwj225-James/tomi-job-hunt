@@ -616,7 +616,7 @@ export async function fillPitch(
     }
     showPanel({
       title: 'TomiHunt',
-      rows: ['未找到聊天框输入区，页面上也没找到「立即沟通」按钮 — 请手动打开聊天窗口后再点一次。'],
+      rows: ['未找到聊天框输入区，页面上也没找到「立即沟通 / 聊一聊」按钮 — 请手动打开聊天窗口后再点一次。'],
       pitch,
       actions: back ? [{ label: '返回', onClick: back }] : [],
     });
@@ -644,15 +644,28 @@ export async function fillPitch(
   });
 }
 
-/** Clicks the first visible 立即沟通/继续沟通 button on the page. */
-function clickOpenChatButton(): boolean {
+/** Chat-open button labels across sites (zhipin: 立即沟通/继续沟通; liepin: 聊一聊). */
+const CHAT_OPEN_LABELS = ['沟通', '聊一聊', '私聊'];
+
+/** Clicks the first visible 立即沟通 / 继续沟通 / 聊一聊 button on the page. */
+export function clickOpenChatButton(): boolean {
+  const tryClick = (el: HTMLElement): boolean => {
+    const text = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (text.length > 12) return false; // paragraphs, not buttons
+    if (CHAT_OPEN_LABELS.some((label) => text.includes(label))) {
+      el.click();
+      return true;
+    }
+    return false;
+  };
   for (const sel of OPEN_CHAT_SELECTORS) {
     for (const el of document.querySelectorAll<HTMLElement>(sel)) {
-      if (el.textContent?.includes('沟通')) {
-        el.click();
-        return true;
-      }
+      if (tryClick(el)) return true;
     }
+  }
+  // Label-scan fallback over every clickable element (site markup drifts).
+  for (const el of document.querySelectorAll<HTMLElement>('a, button, [role="button"]')) {
+    if (tryClick(el)) return true;
   }
   return false;
 }
