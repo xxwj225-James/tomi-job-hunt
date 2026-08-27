@@ -61,11 +61,11 @@ flowchart LR
 
 **不需要 Node、不需要启动服务**——装好插件、粘贴一个 API Key 即可：
 
-1. 下载本仓库 [Releases](https://github.com/xxwj225-James/tomi-job-hunt/releases) 中的源码包 `tomihunt-source.zip`，解压
-2. 双击里面的 `scripts\install-extension.bat` —— 插件会自动安装到**固定目录**，并按提示在浏览器里加载一次
-3. 以后每次更新：重新运行这个脚本，数据（Key/简历/设置）自动保留
-3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Qwen / Kimi / 通用自填）→ 粘贴 API Key → **保存并测试连接**
-4. 打开任意 Boss 直聘 / 猎聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 填入聊天框（或设置为自动发送）
+1. 下载本仓库 [Releases](https://github.com/xxwj225-James/tomi-job-hunt/releases) 中的插件包 `tomihunt-extension.zip`，解压
+2. 双击解压出来的 `install-extension.bat` —— 按提示选择 **Chrome** 或 **Edge**，插件会自动安装到**固定目录**，并在浏览器里「加载已解压的扩展程序」一次（只需一次）
+3. 以后每次更新：重新运行这个脚本，数据（Key / 简历 / 设置）自动保留
+4. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Qwen / Kimi / 通用自填）→ 粘贴 API Key → **保存并测试连接**
+5. 打开任意 Boss 直聘 / 猎聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 填入聊天框（或设置为自动发送）
 
 直连模式覆盖核心闭环：JD 提取、AI 标签、打招呼语（Boss 直聘 + 猎聘）、匹配度打分、面试准备。发送方式可选：填入后自己确认发送（默认），或自动发送。
 
