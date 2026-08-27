@@ -18,13 +18,13 @@ TomiHunt 是免费开源的本地工具（MIT 协议），没有广告、没有�
 - 推广链接：[点击注册/购买腾讯云](<YOUR_TENCENT_PROMO_LINK>)
 - 推荐场景：云服务器、轻量应用服务器（如需远程部署 Core 服务）
 
-## 大模型 API 邀请返佣
+## 大模型 API 平台邀请
+
+> 说明：截至 2026-08，DeepSeek 官方无个人邀请返现计划；Kimi「登月同行计划」仅抽奖送自用会员额度（不可提现）。以下渠道不承诺现金收入，仅作补充。
 
 | 平台 | 邀请链接 / 邀请码 | 说明 |
 |---|---|---|
-| DeepSeek | `<YOUR_DEEPSEEK_INVITE>` | 充值返现邀请 |
-| Kimi (Moonshot) | `<YOUR_KIMI_INVITE>` | 邀请返现 |
-| 其他 | `<YOUR_OTHER_INVITE>` | — |
+| 第三方 API 转售平台（如 Novita AI） | `<YOUR_NOVITA_INVITE>` | 邀请奖励为 API 额度（双方各得），不可提现，可抵扣开发成本 |
 
 ## 打赏
 
