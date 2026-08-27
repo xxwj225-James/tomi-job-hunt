@@ -164,6 +164,13 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
 
   const RESUME_EXTS = ['pdf', 'docx', 'txt', 'md'] as const;
 
+  // The user's own resume, served back for the extension's recovery flow.
+  // Localhost-only endpoint; the resume never leaves the machine.
+  app.get('/setup/resume', async (c) => {
+    const resume = await loadResumeFile(configDir, log);
+    return c.json({ exists: Boolean(resume), resume: resume ?? '' });
+  });
+
   app.post('/setup/resume', async (c) => {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get('file');
