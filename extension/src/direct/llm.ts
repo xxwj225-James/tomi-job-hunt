@@ -84,7 +84,15 @@ async function openAiCompatibleChat(
 
 /** Config lives in chrome.storage.local — readable by content scripts + popup. */
 export async function loadDirectConfig(): Promise<DirectLlmConfig | null> {
-  const data = await chrome.storage.local.get('tomihunt-llm-config');
+  let data: Record<string, unknown>;
+  try {
+    data = await chrome.storage.local.get('tomihunt-llm-config');
+  } catch (err) {
+    if (err instanceof Error && /context invalidated/i.test(err.message)) {
+      throw new DirectLlmError('插件刚被更新或重载——请刷新本页面（F5）后再试。');
+    }
+    throw err;
+  }
   const cfg = data['tomihunt-llm-config'] as DirectLlmConfig | undefined;
   return cfg?.apiKey ? cfg : null;
 }

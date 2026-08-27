@@ -12,6 +12,21 @@ import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 
 export const client = new CoreClient();
 
+/** Chrome kills chrome.* access on pages open during an extension reload. */
+export function isContextInvalidated(err: unknown): boolean {
+  return err instanceof Error && /context invalidated/i.test(err.message);
+}
+
+/** Friendly panel state for the invalidation case — with a refresh action. */
+export function contextInvalidatedPanel(title: string): void {
+  showPanel({
+    state: 'error',
+    title,
+    rows: ['插件刚被更新或重载，当前页面的插件上下文已失效。', '刷新页面后即可正常使用（你的数据都在）。'],
+    actions: [{ label: '🔄 刷新页面', onClick: () => location.reload(), primary: true }],
+  });
+}
+
 /** Support/donation page (affiliate links) — footer of every panel state. */
 const SUPPORT_URL = 'https://github.com/xxwj225-James/tomi-job-hunt/blob/main/docs/support.md';
 /** Author's other product — subtle referral next to the support link. */
@@ -505,6 +520,10 @@ export async function captureAndShow(
         }
       });
     } catch (err) {
+      if (isContextInvalidated(err)) {
+        contextInvalidatedPanel(panelTitle);
+        return;
+      }
       showPanel({
         state: 'error',
         title: panelTitle,
@@ -523,6 +542,10 @@ export async function captureAndShow(
     lastCapturedKey = jdKey(ctx.jd);
     showTaggedPanel(ctx, panelTitle);
   } catch (err) {
+    if (isContextInvalidated(err)) {
+      contextInvalidatedPanel(panelTitle);
+      return;
+    }
     showPanel({
       state: 'error',
       title: panelTitle,
@@ -565,6 +588,10 @@ export async function generatePitch(
       ],
     });
   } catch (err) {
+    if (isContextInvalidated(err)) {
+      contextInvalidatedPanel(panelTitle);
+      return;
+    }
     showPanel({
       state: 'error',
       title: panelTitle,
@@ -872,6 +899,10 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
       ],
     });
   } catch (err) {
+    if (isContextInvalidated(err)) {
+      contextInvalidatedPanel(panelTitle);
+      return;
+    }
     showPanel({
       state: 'error',
       title: panelTitle,
@@ -903,6 +934,10 @@ export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string
       actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
     });
   } catch (err) {
+    if (isContextInvalidated(err)) {
+      contextInvalidatedPanel(panelTitle);
+      return;
+    }
     showPanel({
       state: 'error',
       title: panelTitle,
