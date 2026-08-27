@@ -10,10 +10,9 @@ Thanks for your interest in contributing! 🎉
 - **Compliance moat.** Anything shareable must pass through
   `core/src/jd/sanitize.ts` (`buildSharedIntel`) — raw JD text, HR names and
   contact details never leave the machine.
-- **License.** This is NOT open source — it is source-available under the
-  [TomiHunt Free-Use License](LICENSE). Submitting a PR means you agree your
-  contribution becomes part of the project under that license (see the
-  贡献条款 section of LICENSE).
+- **License.** MIT — see [LICENSE](LICENSE). Community courtesy (not a legal
+  requirement): keep the author attribution and the 💝 支持项目 links when
+  redistributing builds — they fund ongoing development.
 - All code, comments, and commit messages are written in **English**.
 - Follow [Conventional Commits](https://www.conventionalcommits.org/) for
   commit messages: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
