@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { extractZhipinJdDom, jidFromUrl, parseWapiDetail } from './zhipin.js';
+import { extractZhipinJdDom, hasDetailMarker, jidFromUrl, parseWapiDetail } from './zhipin.js';
 
 function docFrom(html: string): Document {
   return new JSDOM(html).window.document;
 }
+
+describe('hasDetailMarker', () => {
+  it('detects an opened detail view', () => {
+    const dom = new JSDOM('<html><body><div class="job-detail-box"><div class="job-name">后端</div></div></body></html>');
+    expect(hasDetailMarker(dom.window.document)).toBe(true);
+  });
+
+  it('ignores pure list pages', () => {
+    const dom = new JSDOM('<html><body><div class="job-list-box"><div class="job-name">后端</div></div></body></html>');
+    expect(hasDetailMarker(dom.window.document)).toBe(false);
+  });
+
+  it('counts the 立即沟通 button as a detail marker', () => {
+    const dom = new JSDOM('<html><body><a class="op-btn op-btn-chat">立即沟通</a></body></html>');
+    expect(hasDetailMarker(dom.window.document)).toBe(true);
+  });
+});
 
 describe('jidFromUrl', () => {
   it('parses job ids from detail URLs', () => {

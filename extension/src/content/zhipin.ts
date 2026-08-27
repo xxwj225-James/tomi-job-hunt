@@ -133,24 +133,39 @@ function jidFromDom(doc: Document): string | null {
   return match?.[1] ?? null;
 }
 
-async function main(): Promise<void> {
-  const isListSpa = /\/web\/geek\/job\b/.test(window.location.href) && !/job_detail/.test(window.location.href);
+/**
+ * True when the page shows an OPENED job-detail view (not just list items):
+ * the detail container or the 立即沟通 button. Guards the SPA watcher on
+ * list/home/company pages so a list entry is never mistaken for a detail.
+ */
+export function hasDetailMarker(doc: Document): boolean {
+  return Boolean(
+    doc.querySelector(
+      '.job-detail-box, .job-detail-section, .job-detail, a.op-btn.op-btn-chat, .op-btn-chat',
+    ),
+  );
+}
 
-  if (!isListSpa) {
+async function main(): Promise<void> {
+  const isDetailUrl = /job_detail\//.test(window.location.href);
+
+  if (isDetailUrl) {
     const jd = await extractZhipinJd(document);
-    if (!jd) return; // not a job detail page (e.g. 404 / login wall)
+    if (!jd) return; // 404 / login wall
     const ctx = { jd: toInput(jd) };
     await captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
     return;
   }
 
-  // SPA list mode (/web/geek/jobs): clicking a card opens the JD detail in
-  // the same page WITHOUT a URL change. Watch the DOM, and whenever the
-  // visible JD's identity changes, analyze the new one.
+  // SPA surfaces (导航职位列表 /web/geek/jobs、首页直开的 JD、公司招聘页
+  // gongsi/job/*): a JD detail opens in the same page WITHOUT a URL change.
+  // Watch the DOM; only analyze when a detail view is actually open, and
+  // re-analyze whenever the visible JD's identity changes.
   let activeKey: string | null = null;
   const poll = async (): Promise<void> => {
+    if (!hasDetailMarker(document)) return; // no detail open (list / home)
     const jd = await extractZhipinJd(document);
-    if (!jd) return; // no detail panel open yet / closed
+    if (!jd) return;
     const key = `${jd.title}|${jd.company}`;
     if (key === activeKey) return; // same JD still on screen
     activeKey = key;
@@ -160,7 +175,7 @@ async function main(): Promise<void> {
   let ticks = 0;
   const timer = setInterval(() => {
     ticks += 1;
-    if (ticks > 150) clearInterval(timer); // ~5 min lifetime, like zhipin-list
+    if (ticks > 300) clearInterval(timer); // ~10 min lifetime
     void poll();
   }, 2000);
   void poll();

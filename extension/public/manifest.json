@@ -16,7 +16,7 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://www.zhipin.com/job_detail/*", "https://www.zhipin.com/web/geek/job*"],
+      "matches": ["https://www.zhipin.com/*"],
       "js": ["content/zhipin.js"],
       "run_at": "document_idle"
     },
