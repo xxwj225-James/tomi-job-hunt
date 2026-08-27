@@ -16,6 +16,11 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // revalidate every 30 min
 
 let memoryCache: { base: string; at: number } | null = null;
 
+/** Test hook — clears the in-memory cache (storage cache untouched). */
+export function _resetCoreBaseCache(): void {
+  memoryCache = null;
+}
+
 function isTomiHuntHealth(data: unknown): boolean {
   return (
     typeof data === 'object' &&

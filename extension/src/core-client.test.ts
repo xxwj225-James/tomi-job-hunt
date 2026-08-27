@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCoreBase } from './core-client.js';
+import { _resetCoreBaseCache, getCoreBase } from './core-client.js';
 
 function mockChrome(stored: unknown = undefined): void {
   const store = new Map<string, unknown>();
@@ -27,6 +27,7 @@ function healthJson(provider: string): object {
 }
 
 beforeEach(() => {
+  _resetCoreBaseCache(); // module-level memory cache leaks across tests otherwise
   vi.restoreAllMocks();
   delete (globalThis as Record<string, unknown>).chrome;
 });
