@@ -53,7 +53,6 @@ export async function greetJd(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildGreetingPrompt(jd, resume) }],
     temperature: 0.7,
-    maxTokens: 512,
   };
   const result = await provider.chat(req);
   log.debug(`greeting: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`);

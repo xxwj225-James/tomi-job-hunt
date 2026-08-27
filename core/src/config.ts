@@ -63,7 +63,6 @@ const fileConfigSchema = z.object({
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
   thinking: z.boolean().optional(),
-  maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
   concurrency: z.number().int().min(1).max(16).optional(),
   port: z.number().int().min(1).max(65535).optional(),
@@ -151,7 +150,6 @@ export function loadConfig(options?: {
     apiKey,
     baseUrl,
     thinking: file.thinking,
-    maxTokens: file.maxTokens,
     temperature: file.temperature,
     concurrency: intEnv(env.TOMI_CONCURRENCY) ?? file.concurrency ?? 2,
   };
@@ -182,7 +180,6 @@ export type ConfigFilePatch = Partial<{
   apiKey: string;
   baseUrl: string;
   thinking: boolean;
-  maxTokens: number;
   temperature: number;
   concurrency: number;
   port: number;
@@ -218,7 +215,6 @@ export function saveConfigFile(dir: string, patch: ConfigFilePatch): Record<stri
     'model',
     'baseUrl',
     'thinking',
-    'maxTokens',
     'temperature',
     'concurrency',
     'port',

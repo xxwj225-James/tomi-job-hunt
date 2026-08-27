@@ -12,7 +12,6 @@ export interface ChatRequest {
   messages: ChatMessage[];
   /** Overrides the provider default model. */
   model?: string;
-  maxTokens?: number;
   temperature?: number;
 }
 
@@ -60,7 +59,6 @@ export interface LLMConfig {
    * JSON-friendly (thinking mode ignores temperature).
    */
   thinking?: boolean;
-  maxTokens?: number;
   temperature?: number;
   /** Max in-flight LLM calls. Each claude-code call spawns a CLI subprocess. */
   concurrency: number;

@@ -19,7 +19,7 @@
 TomiHunt 全部跑在你的电脑上，用 AI + 社区打破信息壁垒：
 
 - **浏览器插件**（Chrome / Edge）：自动提炼 Boss 直聘 / 猎聘岗位详情，AI 结构化标签（技术栈/工时/风险词），打招呼语一键填入聊天框
-- **本地 Core 服务**：本地 JD 库 + LLM 标签化 + 话术生成（支持 Claude / DeepSeek / Kimi / Qwen，自由切换）
+- **本地 Core 服务**：本地 JD 库 + LLM 标签化 + 话术生成（DeepSeek / Qwen / Kimi / 任意 OpenAI 兼容端点，自由切换）
 - **去中心化情报网**（规划中）：匿名共享结构化求职情报（真实薪资、外包黑榜），零注册、零服务器
 
 ```mermaid
@@ -36,7 +36,7 @@ flowchart LR
         Core -->|读取| Data
     end
 
-    LLM["LLM<br/>Claude / DeepSeek / Kimi / Qwen"]
+    LLM["LLM<br/>DeepSeek / Qwen / Kimi / 通用"]
 
     Ext -->|"HTTP / WebSocket (仅本机)"| Core
     Core -->|"API (仅 JD 与提示词)"| LLM
@@ -63,7 +63,7 @@ flowchart LR
 
 1. 下载本仓库的 [Releases](https://github.com/xxwj225-James/tomi-job-hunt/releases) 中的 `extension.zip`，解压（或自行 `npm run build -w extension` 后用 `extension/dist/`）
 2. 打开 `chrome://extensions`（Edge 为 `edge://extensions`）→ 右上角开启**开发者模式** → **加载已解压的扩展程序** → 选择解压后的目录
-3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Kimi / Qwen / Claude 任选）→ 粘贴 API Key → **保存并测试连接**
+3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Qwen / Kimi / 通用自填）→ 粘贴 API Key → **保存并测试连接**
 4. 打开任意 Boss 直聘 / 猎聘岗位详情页 → 右下角 TomiHunt 面板自动导入 JD → 生成打招呼语 → 立即沟通 → 填入聊天框（或设置为自动发送）
 
 直连模式覆盖核心闭环：JD 提取、AI 标签、打招呼语（Boss 直聘 + 猎聘）、匹配度打分、面试准备。发送方式可选：填入后自己确认发送（默认），或自动发送。
@@ -144,8 +144,8 @@ docs/       使用指南、架构、隐私与合规文档
 TomiHunt is an AI-powered job-hunting assistant for the Chinese job market
 (Boss直聘 / 猎聘). A browser extension extracts job descriptions and sends
 them to a **local** Core service that tags them with structured metadata and
-writes high-response-rate greeting messages. Provider-agnostic: Claude,
-DeepSeek, Kimi and Qwen all work out of the box. A decentralized,
+writes high-response-rate greeting messages. Provider-agnostic: DeepSeek,
+Qwen, Kimi and any OpenAI-compatible endpoint work out of the box. A decentralized,
 accountless community-intel feed (structured facts only — never raw JD text)
 is on the roadmap.
 

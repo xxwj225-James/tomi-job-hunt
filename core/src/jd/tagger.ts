@@ -152,7 +152,6 @@ export async function tagJd(
       { role: 'user', content: buildPrompt(jd) },
     ],
     temperature: 0.1,
-    maxTokens: 1024,
   };
   const result = await provider.chat(req);
   log.debug(`tagger: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`);

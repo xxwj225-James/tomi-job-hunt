@@ -12,11 +12,13 @@ const $ = <T extends HTMLElement>(id: string): T => {
 };
 
 const providerEl = $<HTMLSelectElement>('provider');
+const baseUrlEl = $<HTMLInputElement>('baseUrl');
 const modelEl = $<HTMLInputElement>('model');
 const apiKeyEl = $<HTMLInputElement>('apiKey');
 const thinkingEl = $<HTMLInputElement>('thinking');
 const statusEl = $<HTMLDivElement>('status');
 const modelHintEl = $<HTMLDivElement>('model-hint');
+const baseUrlHintEl = $<HTMLDivElement>('baseUrl-hint');
 const resumeEl = $<HTMLTextAreaElement>('resume');
 const resumeFileEl = $<HTMLInputElement>('resume-file');
 const sendModeEl = $<HTMLSelectElement>('sendMode');
@@ -31,9 +33,13 @@ function updateModelHint(): void {
   if (preset) {
     modelHintEl.textContent = `默认: ${preset.defaultModel}（可留空）`;
     if (!modelEl.value) modelEl.placeholder = preset.defaultModel;
+    if (!baseUrlEl.value) baseUrlEl.placeholder = preset.baseUrl;
+    baseUrlHintEl.textContent = '已自动填充预设地址，可修改（如代理网关）';
   } else {
-    modelHintEl.textContent = '默认: claude-sonnet-5（可留空）';
-    if (!modelEl.value) modelEl.placeholder = 'claude-sonnet-5';
+    modelHintEl.textContent = '请填写模型名称（必填）';
+    if (!modelEl.value) modelEl.placeholder = '如 deepseek-v4-flash / gpt-4o-mini';
+    baseUrlHintEl.textContent = '必填：任意 OpenAI 兼容地址（自建网关 / OneAPI / Ollama 等）';
+    if (!baseUrlEl.value) baseUrlEl.placeholder = 'https://你的网关地址/v1';
   }
 }
 
@@ -44,8 +50,9 @@ async function buildConfig(): Promise<DirectLlmConfig> {
   const preset = presetFor(provider);
   const cfg: DirectLlmConfig = {
     provider,
-    model: modelEl.value.trim() || preset?.defaultModel || 'claude-sonnet-5',
+    model: modelEl.value.trim() || preset?.defaultModel || '',
     apiKey: apiKeyEl.value.trim(),
+    baseUrl: baseUrlEl.value.trim() || undefined,
     thinking: thinkingEl.checked,
   };
   return cfg;
@@ -99,6 +106,7 @@ void loadDirectConfig().then((cfg) => {
   providerEl.value = cfg.provider;
   modelEl.value = cfg.model;
   apiKeyEl.value = cfg.apiKey;
+  baseUrlEl.value = cfg.baseUrl ?? '';
   thinkingEl.checked = cfg.thinking === true;
   updateModelHint();
 });

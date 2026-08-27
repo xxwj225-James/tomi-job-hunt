@@ -60,7 +60,6 @@ export async function interviewPrep(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildInterviewPrompt(jd, resume) }],
     temperature: 0.4,
-    maxTokens: 2000,
   };
   try {
     const result = await provider.chat(req);

@@ -96,7 +96,6 @@ export async function huntCompanies(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildCompanyListPrompt(skills, cities, count) }],
     temperature: 0.3,
-    maxTokens: 3000,
   };
   try {
     const result = await provider.chat(req);
@@ -119,7 +118,6 @@ export async function draftColdEmail(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildColdEmailPrompt(company, skills, resume, context) }],
     temperature: 0.4,
-    maxTokens: 1200,
   };
   const result = await provider.chat(req);
   log.debug(`hunt: cold email drafted (${result.usage.outputTokens} out tokens)`);

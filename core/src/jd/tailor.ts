@@ -9,8 +9,6 @@ import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
 import type { MatchJd } from './match.js';
 
-const MAX_OUTPUT_TOKENS = 4000;
-
 export function buildTailorPrompt(jd: MatchJd, resume: string): string {
   return `你是简历定制专家。根据目标 JD 改写求职者的 Markdown 简历。
 
@@ -41,7 +39,6 @@ export async function tailorResume(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildTailorPrompt(jd, resume) }],
     temperature: 0.3,
-    maxTokens: MAX_OUTPUT_TOKENS,
   };
   const result = await provider.chat(req);
   log.debug(`tailor: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`);

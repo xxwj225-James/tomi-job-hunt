@@ -3,19 +3,21 @@
  * service worker. No local Core service required: install the extension,
  * paste an API key in the options page, done.
  *
- * Providers: deepseek / kimi / qwen (OpenAI-compatible, preset base URLs,
+ * Providers: deepseek / qwen / kimi (OpenAI-compatible, preset base URLs,
  * provider-specific params ported from core/src/llm/openai-compat.ts) and
- * claude-api (Anthropic Messages API with the mandatory
- * anthropic-dangerous-direct-browser-access header for browser calls).
+ * 通用 (generic — the user provides their own OpenAI-compatible base URL
+ * and model, e.g. a self-hosted gateway, OneAPI, Ollama, SiliconFlow).
  */
 import type { ChatMessage } from '../types.js';
 
-export type DirectProviderId = 'deepseek' | 'kimi' | 'qwen' | 'claude-api';
+export type DirectProviderId = 'deepseek' | 'qwen' | 'kimi' | 'generic';
 
 export interface DirectLlmConfig {
   provider: DirectProviderId;
   model: string;
   apiKey: string;
+  /** Custom endpoint for the generic provider (or to override a preset). */
+  baseUrl?: string;
   thinking?: boolean;
 }
 
@@ -80,46 +82,6 @@ async function openAiCompatibleChat(
   };
 }
 
-async function claudeApiChat(
-  apiKey: string,
-  model: string,
-  messages: ChatMessage[],
-): Promise<DirectChatResult> {
-  const system = messages
-    .filter((m) => m.role === 'system')
-    .map((m) => m.content)
-    .join('\n\n');
-  const apiMessages = messages
-    .filter((m) => m.role !== 'system')
-    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      // Required for direct browser calls to the Anthropic API
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({ model, max_tokens: 4096, system: system || undefined, messages: apiMessages }),
-  });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new DirectLlmError(`Claude API 错误 ${resp.status}: ${text.slice(0, 200)}`);
-  }
-  const json = (await resp.json()) as {
-    model?: string;
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
-  return {
-    text: (json.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join(''),
-    model: json.model ?? model,
-    usage: { inputTokens: json.usage?.input_tokens ?? 0, outputTokens: json.usage?.output_tokens ?? 0 },
-  };
-}
-
 /** Config lives in chrome.storage.local — readable by content scripts + popup. */
 export async function loadDirectConfig(): Promise<DirectLlmConfig | null> {
   const data = await chrome.storage.local.get('tomihunt-llm-config');
@@ -134,12 +96,14 @@ export async function directChat(messages: ChatMessage[]): Promise<DirectChatRes
       '尚未配置 API Key。请点击插件图标 → 设置，选择模型服务商并粘贴 API Key。',
     );
   }
-  if (cfg.provider === 'claude-api') {
-    return claudeApiChat(cfg.apiKey, cfg.model, messages);
+  const baseUrl = (cfg.baseUrl?.trim() || (PRESETS[cfg.provider]?.baseUrl ?? '')).replace(/\/+$/, '');
+  if (!baseUrl) {
+    throw new DirectLlmError('「通用」服务商需要填写 Base URL（OpenAI 兼容地址，如 https://xxx/v1）。');
   }
-  const preset = PRESETS[cfg.provider];
-  if (!preset) throw new DirectLlmError(`未知 provider: ${cfg.provider}`);
-  return openAiCompatibleChat(preset.baseUrl, cfg.apiKey, cfg.model, messages, cfg.thinking === true);
+  if (!cfg.model.trim()) {
+    throw new DirectLlmError('请填写模型名称（model）。');
+  }
+  return openAiCompatibleChat(baseUrl, cfg.apiKey, cfg.model, messages, cfg.thinking === true);
 }
 
 /** Connection test for the options page. */

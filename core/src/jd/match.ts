@@ -65,7 +65,6 @@ export async function scoreJd(
   const req: ChatRequest = {
     messages: [{ role: 'user', content: buildMatchPrompt(jd, resume) }],
     temperature: 0.1,
-    maxTokens: 1200,
   };
   try {
     const result = await provider.chat(req);

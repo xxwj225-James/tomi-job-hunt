@@ -49,7 +49,6 @@ const chatRequestSchema = z.object({
     )
     .min(1),
   model: z.string().optional(),
-  maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
 });
 

@@ -43,10 +43,15 @@
       <label>模型服务商</label>
       <select id="provider">
         <option value="deepseek">DeepSeek（国内直连 · 便宜）</option>
-        <option value="kimi">Kimi / Moonshot</option>
         <option value="qwen">通义千问 Qwen（阿里云百炼）</option>
-        <option value="claude-api">Claude（Anthropic）</option>
+        <option value="kimi">Kimi / Moonshot</option>
+        <option value="generic">通用（自填 Base URL + 模型）</option>
       </select>
+    </div>
+    <div class="field">
+      <label>Base URL</label>
+      <input id="baseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
+      <div class="mode-note" id="baseUrl-hint">预设服务商已自动填充；「通用」请填写任意 OpenAI 兼容地址（自建网关 / OneAPI / Ollama 等）</div>
     </div>
     <div class="field">
       <label>模型</label>

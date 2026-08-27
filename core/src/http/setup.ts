@@ -49,7 +49,6 @@ const configPatchSchema = z
     clearApiKey: z.boolean().optional(),
     baseUrl: z.string().optional(),
     thinking: z.boolean().optional(),
-    maxTokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(2).optional(),
     concurrency: z.number().int().min(1).max(16).optional(),
     port: z.number().int().min(1).max(65535).optional(),
@@ -83,7 +82,6 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
       apiKeyMasked,
       baseUrl,
       thinking: raw.thinking === true,
-      maxTokens: (raw.maxTokens as number | undefined) ?? 4096,
       temperature: (raw.temperature as number | undefined) ?? 0.3,
       concurrency: (raw.concurrency as number | undefined) ?? 2,
       port: (raw.port as number | undefined) ?? 3000,
@@ -111,7 +109,6 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
         apiKey: saved.apiKey as string | undefined,
         baseUrl: (saved.baseUrl as string | undefined) ?? PROVIDER_PRESETS[provider]?.baseUrl,
         thinking: saved.thinking === true,
-        maxTokens: saved.maxTokens as number | undefined,
         temperature: saved.temperature as number | undefined,
         concurrency: (saved.concurrency as number) ?? 2,
       };

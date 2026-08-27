@@ -72,17 +72,28 @@ describe('directChat', () => {
     await expect(directChat([{ role: 'user', content: 'hi' }])).rejects.toThrow('API 错误 401');
   });
 
-  it('claude-api path sends the direct-browser-access header', async () => {
-    mockStorage({ provider: 'claude-api', model: 'claude-sonnet-5', apiKey: 'sk-ant-test' });
+  it('generic provider uses the user-provided base URL and model', async () => {
+    mockStorage({
+      provider: 'generic',
+      model: 'my-model',
+      apiKey: 'sk-gw',
+      baseUrl: 'http://127.0.0.1:9999/v1/',
+    });
     const fetchMock = mockFetch({
-      model: 'claude-sonnet-5',
-      content: [{ type: 'text', text: 'ok' }],
-      usage: { input_tokens: 3, output_tokens: 1 },
+      model: 'my-model',
+      choices: [{ message: { content: 'gateway ok' } }],
+      usage: { prompt_tokens: 2, completion_tokens: 1 },
     });
     const result = await directChat([{ role: 'user', content: 'hi' }]);
-    expect(result.text).toBe('ok');
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect((init.headers as Record<string, string>)['anthropic-dangerous-direct-browser-access']).toBe('true');
+    expect(result.text).toBe('gateway ok');
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:9999/v1/chat/completions'); // trailing slash trimmed
+  });
+
+  it('generic provider rejects missing base URL', async () => {
+    mockStorage({ provider: 'generic', model: 'm', apiKey: 'sk-gw' });
+    mockFetch({});
+    await expect(directChat([{ role: 'user', content: 'hi' }])).rejects.toThrow(/Base URL/);
   });
 });
 

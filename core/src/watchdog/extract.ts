@@ -68,7 +68,6 @@ export async function extractJobs(
     const req: ChatRequest = {
       messages: [{ role: 'user', content: buildExtractPrompt(batch) }],
       temperature: 0.1,
-      maxTokens: 2000,
     };
     try {
       const result = await provider.chat(req);

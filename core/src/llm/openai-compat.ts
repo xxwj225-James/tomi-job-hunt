@@ -150,10 +150,7 @@ export class OpenAICompatProvider implements ChatProvider {
       model: this.model(req),
       stream,
       messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-      max_tokens: Math.min(
-        req.maxTokens ?? this.cfg.maxTokens ?? DEFAULT_MAX_TOKENS,
-        this.providerMaxTokens(),
-      ),
+      max_tokens: Math.min(DEFAULT_MAX_TOKENS, this.providerMaxTokens()),
     };
     if (req.temperature !== undefined || this.cfg.temperature !== undefined) {
       body.temperature = req.temperature ?? this.cfg.temperature;

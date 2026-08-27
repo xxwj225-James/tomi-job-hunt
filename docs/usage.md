@@ -79,12 +79,12 @@ Windows 用户：`~` 即 `C:\Users\你的用户名`，完整路径为
 
 | provider | 默认模型 | API Key 获取 | 特点 |
 |---|---|---|---|
-| `deepseek` | deepseek-v4-flash | platform.deepseek.com | 国内直连、成本最低；重任务可换 deepseek-v4-pro |
-| `kimi` | kimi-k2.6 | platform.moonshot.cn | 可换 kimi-k2.7-code / kimi-k3 |
-| `qwen` | qwen3.7-plus | 阿里云百炼（Model Studio） | 可换 qwen3.8-max（仅思考模式） |
-| `claude-code` | claude-sonnet-5 | Anthropic | Agent 能力最强；也可直接 `claude login` 后用订阅凭据 |
-| `claude-api` | claude-sonnet-5 | Anthropic | Messages API 直连，轻量便宜 |
-| `openai-compatible` | 需手动指定 | — | 任意 OpenAI 兼容端点（自建网关、OneAPI、Ollama 等） |
+| `deepseek` | deepseek-v4-flash | platform.deepseek.com | 国内直连、成本最低 |
+| `qwen` | qwen3.7-plus | 阿里云百炼（Model Studio） | 免费额度 + 按量 |
+| `kimi` | kimi-k2.6 | platform.moonshot.cn | — |
+| `openai-compatible` | 需手动指定 | — | 通用：任意 OpenAI 兼容端点（自建网关、OneAPI、Ollama 等），自填 baseUrl + model |
+
+> 高级用户（完整模式）：config.json 额外支持 `claude-code` / `claude-api`（Anthropic 系，设置页不展示）。
 
 ### 方式 B：环境变量（也可两者混用）
 
@@ -92,12 +92,12 @@ Windows 用户：`~` 即 `C:\Users\你的用户名`，完整路径为
 export TOMI_PROVIDER=deepseek
 export TOMI_API_KEY=sk-你的密钥
 # 可选覆盖：
-# export TOMI_MODEL=deepseek-v4-pro
+# export TOMI_MODEL=自定义模型名
 # export TOMI_BASE_URL=https://自定义网关/v1
 # export TOMI_PORT=4000   (高级：显式指定端口)
 ```
 
-Claude 系（claude-code / claude-api）用 `ANTHROPIC_API_KEY`。
+（Claude 系高级用法见上表注释，用 `ANTHROPIC_API_KEY`。）
 
 ### 配置项完整参考
 
@@ -108,9 +108,8 @@ Claude 系（claude-code / claude-api）用 `ANTHROPIC_API_KEY`。
 | `apiKey` | `TOMI_API_KEY` / `ANTHROPIC_API_KEY` | — | 也可以不放文件里，只用环境变量（更安全） |
 | `baseUrl` | `TOMI_BASE_URL` | 按 provider 预设 | 预设：deepseek/kimi/qwen 已内置正确地址 |
 | `thinking` | — | `false` | DeepSeek/Qwen 思考模式。默认关：更快更省、JSON 输出稳定 |
-| `maxTokens` | — | 4096 | 单次输出上限（另有 provider 上限：deepseek 16000，其他 8192） |
 | `temperature` | — | — | 0~2；deepseek 思考模式下无效 |
-| `concurrency` | `TOMI_CONCURRENCY` | 2 | 并发 LLM 调用数；claude-code 每次调用会起一个子进程，不建议调太高 |
+| `concurrency` | `TOMI_CONCURRENCY` | 2 | 并发 LLM 调用数 |
 | `port` | `TOMI_PORT` | 34567 | 仅绑定 127.0.0.1；被占用自动顺延 34568-34570，普通用户无需关心 |
 | `logLevel` | `TOMI_LOG_LEVEL` | `info` | debug / info / warn / error |
 

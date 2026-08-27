@@ -96,7 +96,6 @@ export async function semanticSearch(
   const intentReq: ChatRequest = {
     messages: [{ role: 'user', content: buildIntentPrompt(query) }],
     temperature: 0.1,
-    maxTokens: 800,
   };
   const intent = parseIntent((await provider.chat(intentReq)).text);
   log.debug(`semantic-search: intent=${JSON.stringify(intent)}`);
@@ -122,7 +121,6 @@ export async function semanticSearch(
   const rerankReq: ChatRequest = {
     messages: [{ role: 'user', content: buildRerankPrompt(query, candidates) }],
     temperature: 0.2,
-    maxTokens: 800,
   };
   const top = parseRerank((await provider.chat(rerankReq)).text, candidates.length);
   return {

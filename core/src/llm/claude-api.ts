@@ -45,7 +45,7 @@ export class ClaudeAPIProvider implements ChatProvider {
     try {
       const resp = await this.client.messages.create({
         model: this.model(req),
-        max_tokens: req.maxTokens ?? this.cfg.maxTokens ?? DEFAULT_MAX_TOKENS,
+        max_tokens: DEFAULT_MAX_TOKENS,
         temperature: this.temperature(req),
         system: systemText(req),
         messages: apiMessages(req),
@@ -68,7 +68,7 @@ export class ClaudeAPIProvider implements ChatProvider {
     try {
       const stream = await this.client.messages.create({
         model: this.model(req),
-        max_tokens: req.maxTokens ?? this.cfg.maxTokens ?? DEFAULT_MAX_TOKENS,
+        max_tokens: DEFAULT_MAX_TOKENS,
         temperature: this.temperature(req),
         system: systemText(req),
         messages: apiMessages(req),
