@@ -117,7 +117,9 @@ $('test').addEventListener('click', async () => {
 
 // --- Config backup: export/import (survives folder changes & reinstalls) ---
 
-const backupPassword = (): string => $('backup-password').value || 'tomihunt';
+// Fixed internal backup password — the file is AES-GCM encrypted
+// (never plaintext) without burdening the user with password UX.
+const backupPassword = (): string => 'tomihunt';
 
 $('export').addEventListener('click', async () => {
   const data = await chrome.storage.local.get([
@@ -138,6 +140,10 @@ $('export').addEventListener('click', async () => {
   a.click();
   URL.revokeObjectURL(url);
   showStatus(true, '✅ 备份已加密下载（密码请务必记住，丢失无法恢复）。');
+});
+
+$('import').addEventListener('click', () => {
+  $('import-file').click();
 });
 
 $('import-file').addEventListener('change', async () => {
@@ -200,20 +206,7 @@ void (async () => {
 // (The API key is intentionally never served back — copy it from
 // ~/.tomi-job-hunt/config.json instead.)
 
-$('recover-resume').addEventListener('click', async () => {
-  showStatus(true, '正在从本地 Core 恢复简历…');
-  try {
-    const resp = await fetch('http://127.0.0.1:34567/setup/resume');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = (await resp.json()) as { exists: boolean; resume: string };
-    if (!data.exists || !data.resume) throw new Error('本地 Core 中没有简历文件');
-    resumeEl.value = data.resume;
-    await chrome.storage.local.set({ 'tomihunt-resume': data.resume });
-    showStatus(true, '✅ 已从本地 Core 恢复简历，记得点「保存」。');
-  } catch (err) {
-    showStatus(false, `恢复失败（Core 在运行吗？）: ${(err as Error).message}`);
-  }
-});
+
 
 // Empty config + Core likely has it → show a recovery hint once.
 void chrome.storage.local.get('tomihunt-llm-config').then(async (data) => {
@@ -224,7 +217,7 @@ void chrome.storage.local.get('tomihunt-llm-config').then(async (data) => {
       showStatus(
         true,
         '检测到本地 Core 已配置（所以匹配分析能用）。当前插件实例的存储是空的——' +
-          'API Key 请从 ~/.tomi-job-hunt/config.json 复制粘贴，简历点下方「从本地 Core 恢复简历」。',
+          'API Key 请从 ~/.tomi-job-hunt/config.json 复制粘贴，简历重新上传即可。',
       );
     }
   } catch {

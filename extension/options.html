@@ -99,18 +99,12 @@
       <button id="save">保存</button>
       <button id="test" class="secondary">保存并测试连接</button>
     </div>
-    <div class="field" style="margin-top:10px">
-      <label>备份密码（导出时设置，导入时需输入相同密码）</label>
-      <input id="backup-password" type="password" placeholder="留空则使用默认密码 tomihunt" autocomplete="off" />
-    </div>
     <div class="row">
-      <button id="export" class="secondary" style="flex:1">导出配置备份（加密）</button>
-      <button id="import" class="secondary" style="flex:1">导入配置备份（解密）</button>
+      <button id="export" class="secondary" style="flex:1">导出配置备份</button>
+      <button id="import" class="secondary" style="flex:1">导入配置备份</button>
       <input id="import-file" type="file" accept=".json" style="display:none" />
     </div>
-    <div class="row" style="margin-top:6px">
-      <button id="recover-resume" class="secondary" style="flex:1">从本地 Core 恢复简历</button>
-    </div>
+
     <div class="mode-note">换目录重装插件后，点「导入配置备份」即可恢复 Key 与简历（换目录会让浏览器把插件当成新实例，数据其实没丢）</div>
     <div id="status"></div>
 
