@@ -95,10 +95,22 @@ export function extractZhipinJdDom(doc: Document): ZhipinJd | null {
 // Real users request job/detail.json ONCE per page view. Polling it every
 // few seconds looks like a bot and triggers 账号异常访问行为 verification.
 // Rules: DOM-only extraction while polling; at most one API fetch per
-// 15 seconds; each JD's result is cached for the session.
+// 15 seconds; each JD's result is cached for the session; and if the API
+// ever answers with a risk-control challenge (no jobDetail payload), the
+// API path is DISABLED for the whole session — DOM-only from then on.
 let lastApiFetchAt = 0;
 const API_MIN_INTERVAL_MS = 15_000;
 const apiCache = new Map<string, ZhipinJd>();
+let apiDisabledForSession = false;
+
+/** True when the response looks like a risk-control challenge, not job data. */
+function looksLikeRiskChallenge(json: unknown): boolean {
+  const root = json as { zpData?: unknown; code?: number; message?: string };
+  if (root.code !== undefined && root.code !== 0) return true;
+  if (!root.zpData) return true; // normal detail responses carry zpData
+  const detail = (root.zpData as { jobDetail?: unknown }).jobDetail;
+  return detail === undefined || detail === null;
+}
 
 export async function extractZhipinJd(doc: Document): Promise<ZhipinJd | null> {
   return extractZhipinJdGuarded(doc, false);
@@ -121,13 +133,22 @@ async function extractZhipinJdGuarded(doc: Document, allowApi: boolean): Promise
   // Hard rate limit: at most one fetch per API_MIN_INTERVAL_MS.
   if (Date.now() - lastApiFetchAt < API_MIN_INTERVAL_MS) return domJd;
 
+  if (apiDisabledForSession) return domJd; // challenged earlier — DOM only
   const jid = jidFromUrl(doc.location?.href ?? '') ?? jidFromDom(doc);
   if (jid) {
     lastApiFetchAt = Date.now();
     try {
       const resp = await fetch(`${DETAIL_API}?jid=${jid}&lid=&securityId=`, { credentials: 'include' });
       if (resp.ok) {
-        const apiJd = parseWapiDetail(await resp.json());
+        const json = await resp.json();
+        if (looksLikeRiskChallenge(json)) {
+          // The account is being challenged — stop using the API entirely
+          // for this session and fall back to the DOM. Never hammer a
+          // challenged endpoint.
+          apiDisabledForSession = true;
+          return domJd;
+        }
+        const apiJd = parseWapiDetail(json);
         const merged: ZhipinJd | null =
           apiJd && apiJd.requirements
             ? apiJd

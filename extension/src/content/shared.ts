@@ -176,6 +176,14 @@ export function observeChatMessages(onIncoming: (text: string) => void): () => v
 
 const LAST_JD_KEY = 'tomihunt-last-jd';
 
+// Auto-send governor: minimum 30s between sends, max 10 per page session.
+// Bulk-message patterns are the classic account-ban trigger — never allow
+// the extension to produce them.
+let lastAutoSendAt = 0;
+let autoSendCount = 0;
+const AUTO_SEND_MIN_INTERVAL_MS = 30_000;
+const AUTO_SEND_MAX_PER_SESSION = 10;
+
 export async function saveLastJd(jd: JdCaptureInput): Promise<void> {
   try {
     await chrome.storage.session.set({ [LAST_JD_KEY]: jd });
@@ -764,6 +772,21 @@ export async function fillPitch(
     return;
   }
   if (shouldAuto) {
+    // Safety governor: auto-send is rate-limited so even heavy usage can
+    // never look like bulk messaging. Exceeding the cap degrades to fill-
+    // only with a notice (the user can still send manually).
+    const now = Date.now();
+    if (now - lastAutoSendAt < AUTO_SEND_MIN_INTERVAL_MS || autoSendCount >= AUTO_SEND_MAX_PER_SESSION) {
+      showPanel({
+        title: 'TomiHunt',
+        rows: ['⚠️ 自动发送过于频繁，已降级为「填入后手动发送」以保护你的账号。'],
+        pitch,
+        actions: back ? [{ label: '返回', onClick: back }] : [],
+      });
+      return;
+    }
+    lastAutoSendAt = now;
+    autoSendCount += 1;
     // Give the site's React state a beat to settle, then send.
     await new Promise((r) => setTimeout(r, 800));
     const sent = sendChatMessage();
