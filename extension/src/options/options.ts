@@ -112,6 +112,54 @@ $('test').addEventListener('click', async () => {
   showStatus(result.ok, result.ok ? `✅ ${result.message}` : `❌ ${result.message}`);
 });
 
+
+// --- Config backup: export/import (survives folder changes & reinstalls) ---
+
+$('export').addEventListener('click', async () => {
+  const data = await chrome.storage.local.get([
+    'tomihunt-llm-config',
+    'tomihunt-resume',
+    'tomihunt-send-mode',
+    'tomihunt-smart-reply',
+  ]);
+  const blob = new Blob([JSON.stringify({ tomihuntBackup: 1, savedAt: new Date().toISOString(), ...data }, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tomihunt-backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus(true, '✅ 备份文件已下载，请妥善保存（含 API Key）。');
+});
+
+$('import-file').addEventListener('change', async () => {
+  const file = $('import-file').files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+    if (parsed.tomihuntBackup !== 1) throw new Error('不是 TomiHunt 备份文件');
+    const cfg = parsed['tomihunt-llm-config'] as DirectLlmConfig | undefined;
+    if (cfg) {
+      providerEl.value = cfg.provider;
+      modelEl.value = cfg.model ?? '';
+      apiKeyEl.value = cfg.apiKey ?? '';
+      baseUrlEl.value = cfg.baseUrl ?? '';
+    }
+    if (typeof parsed['tomihunt-resume'] === 'string') resumeEl.value = parsed['tomihunt-resume'];
+    if (parsed['tomihunt-send-mode'] === 'auto') sendModeEl.value = 'auto';
+    if (parsed['tomihunt-smart-reply'] === 'off') smartReplyEl.value = 'off';
+    await chrome.storage.local.set(parsed);
+    updateModelHint();
+    showStatus(true, '✅ 已导入并恢复配置与简历。点「保存」再确认一次即可。');
+  } catch (err) {
+    showStatus(false, `❌ 导入失败: ${(err as Error).message}`);
+  } finally {
+    $('import-file').value = '';
+  }
+});
+
 // Restore saved config + resume
 void loadDirectConfig().then((cfg) => {
   if (!cfg) return;
