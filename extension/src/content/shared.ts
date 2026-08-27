@@ -12,6 +12,9 @@ import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 
 export const client = new CoreClient();
 
+/** Support/donation page (affiliate links) — footer of every panel state. */
+const SUPPORT_URL = 'https://github.com/<your-name>/tomi-job-hunt/blob/main/docs/support.md';
+
 /**
  * Removes elements hidden by CSS from a detached clone, so textContent stays
  * clean of interference words (display:none / visibility:hidden / width:0).
@@ -165,6 +168,8 @@ const PANEL_CSS = `
 .pitch { background: #f0fdf4; border-radius: 8px; padding: 10px; margin: 8px 0; white-space: pre-wrap; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #4f7cff; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.support { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0f0f0; font-size: 11px; color: #999; }
+.support a { color: #4f7cff; text-decoration: none; }
 `;
 
 function ensurePanel(): ShadowRoot {
@@ -228,8 +233,11 @@ export function showPanel(content: {
           `<button class="btn ${a.primary === false ? 'secondary' : ''}" data-action="${a.label}">${escapeHtml(a.label)}</button>`,
       )
       .join('') ?? '';
+  // Support footer appears on EVERY panel state (tags / match / pitch /
+  // interview) — visible placement, never injected into AI-generated text.
+  const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（免费使用 · 推广返佣/打赏）</div>`;
   setPanelHtml(
-    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}<div style="margin-top:8px">${actionsHtml}</div>`,
+    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}<div style="margin-top:8px">${actionsHtml}</div>${supportHtml}`,
   );
   const s = ensurePanel();
   for (const a of content.actions ?? []) {

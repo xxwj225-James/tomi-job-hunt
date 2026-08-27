@@ -112,7 +112,7 @@ npm run build -w extension
 
 ## 💝 支持项目
 
-TomiHunt 永久免费开源（无广告、无遥测）。如果你愿意支持作者持续开发，可以通过推广链接购买云服务（作者获得返佣，你的价格不变）或请作者喝咖啡——见 [docs/support.md](docs/support.md)。
+TomiHunt 永久免费使用（源码可见、无广告、无遥测）。如果你愿意支持作者持续开发，可以通过推广链接购买云服务（作者获得返佣，你的价格不变）或请作者喝咖啡——见 [docs/support.md](docs/support.md)。
 
 ## ⚖️ 法律与合规
 
@@ -135,7 +135,7 @@ docs/       使用指南、架构、隐私与合规文档
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026 Tomi-Job-Hunt contributors
+[TomiHunt 免费使用许可](LICENSE) © 2026 TomiHunt 作者
 
 ---
 
@@ -164,4 +164,4 @@ the JD text and prompts you choose to send reach your LLM API.
 
 ## License
 
-[MIT](LICENSE) © 2026 Tomi-Job-Hunt contributors
+[TomiHunt 免费使用许可](LICENSE) © 2026 TomiHunt 作者

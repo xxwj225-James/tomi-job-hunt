@@ -1,21 +1,37 @@
-MIT License
+# TomiHunt 免费使用许可协议
 
-Copyright (c) 2026 Tomi-Job-Hunt contributors
+**TomiHunt Free-Use License v1.0**
+Copyright © 2026 TomiHunt 作者（jameswu / tomatovector）。保留所有权利。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本软件**不是开源软件**。源码在 GitHub 公开可见，仅用于提供透明审查与免费使用，
+不授予任何开源许可意义上的权利。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+## 允许
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. **免费使用**：任何个人或组织可免费下载、安装、使用本软件的全部功能，
+   包括个人求职用途与组织内部使用。
+2. **自行修改**：你可以修改源码并**仅限本人/本组织内部使用**修改后的版本。
+3. **问题反馈**：欢迎通过 GitHub Issues 提交 bug 报告与功能建议。
+
+## 禁止（除非获得作者书面授权）
+
+1. 将本软件或其修改版**公开发布、再分发**（包括但不限于打包发布、转售、
+   上传至任何商店或下载站）。
+2. 将本软件或派生代码用于**商业产品/服务**（包括闭源或开源的同类竞品）。
+3. 删除、篡改软件中的版权声明、推广链接与作者署名。
+4. 利用本软件的社区情报网络机制批量伪造、灌水、投放垃圾内容。
+
+## 贡献条款
+
+向本仓库提交 Pull Request 即表示：你同意你的贡献成为本软件的一部分，
+适用本协议，版权归作者统一管理（作者可依据本协议对全部代码行使权利）。
+
+## 免责声明
+
+本软件按「现状」提供，不提供任何明示或暗示的担保。因使用本软件产生的
+任何后果（包括但不限于求职结果、账号风控、数据损失），作者不承担任何责任。
+用户须自行确保其使用行为符合当地法律与各招聘平台的使用条款。
+
+## 侵权内容处理
+
+社区共享内容的通知-删除流程见 [TAKEDOWN_POLICY.md](TAKEDOWN_POLICY.md)。

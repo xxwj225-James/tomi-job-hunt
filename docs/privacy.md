@@ -40,5 +40,5 @@ No intermediate service exists to route through.
 
 ## Can't read the code?
 
-If you don't trust a claim, read the code — the whole point of open source is
+If you don't trust a claim, read the code — the source is published precisely so it can be
 that you can verify it. `core/src/` is small and deliberately dependency-light.
