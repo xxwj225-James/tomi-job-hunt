@@ -9,8 +9,9 @@
 
 ## 方式一：直连模式（5 分钟上手）
 
-1. 下载 Releases 中的 `extension.zip` 并解压（开发者可自行 `npm run build -w extension`）
-2. `chrome://extensions`（Edge 为 `edge://extensions`）→ 开启**开发者模式** → **加载已解压的扩展程序** → 选择解压目录
+1. 下载 Releases 中的源码包并解压，双击 `scripts\install-extension.bat`——插件自动安装到固定目录，按提示选择 **Chrome** 或 **Edge**（Edge 为 `edge://extensions`，开发者模式在左侧栏）
+2. 在扩展管理页 → **加载已解压的扩展程序** → 选择脚本提示的固定目录（`%LOCALAPPDATA%\TomiHunt\extension`）
+3. 以后更新：重新运行 `install-extension.bat`，数据自动保留
 3. 点击工具栏 🤖 图标 → **⚙️ 设置** → 选择服务商（DeepSeek / Kimi / Qwen / Claude）→ 粘贴 API Key → **保存并测试连接**
 4. 打开 Boss 直聘岗位详情页 → 右下角 🤖 TomiHunt 面板自动工作；猎聘同理
 5. 生成打招呼语后点「立即沟通」，在聊天页一键填入

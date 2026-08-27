@@ -1,9 +1,9 @@
 @echo off
 rem TomiHunt extension installer — always extracts to a FIXED path.
-rem Chrome keys unpacked extensions by their LOAD DIRECTORY: loading from
-rem different folders creates separate instances with separate storage.
-rem Installing into one fixed folder means your API key / resume / settings
-rem survive every update forever.
+rem Chrome/Edge key unpacked extensions by their LOAD DIRECTORY: loading
+rem from different folders creates separate instances with separate
+rem storage. Installing into one fixed folder means your API key / resume
+rem / settings survive every update forever.
 setlocal
 set TARGET=%LOCALAPPDATA%\TomiHunt\extension
 
@@ -26,12 +26,26 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [TomiHunt] Done. Opening chrome://extensions ...
-start chrome "chrome://extensions"
 echo.
-echo [TomiHunt] In Chrome: enable Developer mode (top right),
-echo [TomiHunt] then click "Load unpacked" and select:
+echo [TomiHunt] Which browser do you use?
+choice /C CE /M "[C] Chrome    [E] Edge"
+if errorlevel 2 goto edge
+
+:chrome
+start chrome "chrome://extensions"
+echo [TomiHunt] In Chrome: enable Developer mode (top right), then click
+echo [TomiHunt] "Load unpacked" and select:
 echo [TomiHunt]   %TARGET%
+goto done
+
+:edge
+start msedge "edge://extensions"
+echo [TomiHunt] In Edge: enable Developer mode (left sidebar), then click
+echo [TomiHunt] "Load unpacked" and select:
+echo [TomiHunt]   %TARGET%
+
+:done
+echo.
 echo [TomiHunt] If you already loaded it from this path before, just click
 echo [TomiHunt] the refresh icon on the TomiHunt card - your data is intact.
 pause
