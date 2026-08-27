@@ -25,12 +25,10 @@ TomiHunt 是免费开源的本地工具（MIT 协议），无遥测、不收集�
 
 | 平台 | 邀请链接 / 邀请码 | 说明 |
 |---|---|---|
-| 第三方 API 转售平台（如 Novita AI） | `<YOUR_NOVITA_INVITE>` | 邀请奖励为 API 额度（双方各得），不可提现，可抵扣开发成本 |
 
 ## 打赏
 
 - 爱发电：[https://afdian.com/a/jameswu](https://afdian.com/a/jameswu)
-- GitHub Sponsors：`<YOUR_GITHUB_SPONSORS_URL>`（可选，待补充）
 
 ## 其他支持方式
 

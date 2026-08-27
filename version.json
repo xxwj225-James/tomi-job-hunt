@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "releasedAt": "2026-08-17",
-  "notes": "MVP 全功能版本：直连模式 + 本地 Core + 语义搜索 + 情报网",
+  "releasedAt": "2026-08-27",
+  "notes": "首个开源版本 v0.1.0：直连模式 + 本地 Core + 语义搜索 + 匹配打分 + 情报网",
   "releaseUrl": "https://github.com/xxwj225-James/tomi-job-hunt/releases"
 }
