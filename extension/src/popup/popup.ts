@@ -70,10 +70,6 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 void checkVersion();
 void refresh();
 setInterval(() => void refresh(), 5000);
