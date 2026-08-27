@@ -3,6 +3,7 @@
  * Stored in chrome.storage.local; readable by content scripts.
  */
 import { loadDirectConfig, presetFor, testDirectConnection, type DirectLlmConfig } from '../direct/llm.js';
+import { syncConfigToCore } from '../core-client.js';
 import { parseResumeFile, ResumeParseError } from './resume-parser.js';
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -85,7 +86,14 @@ $('save').addEventListener('click', async () => {
   if (resumeEl.value.trim()) {
     await chrome.storage.local.set({ 'tomihunt-resume': resumeEl.value.trim() });
   }
-  showStatus(true, '✅ 已保存（含简历与发送方式）。现在打开 Boss 直聘岗位页即可使用。');
+  // Keep the running Core in agreement (silent no-op when Core is offline)
+  const synced = await syncConfigToCore(cfg);
+  showStatus(
+    true,
+    synced
+      ? '✅ 已保存并同步到本地 Core（完整模式与直连模式现在使用同一配置）。'
+      : '✅ 已保存。现在打开 Boss 直聘岗位页即可使用。',
+  );
 });
 
 $('test').addEventListener('click', async () => {

@@ -132,6 +132,33 @@ export class CoreClient {
   }
 }
 
+/**
+ * Syncs the extension's direct-mode config to a running Core service
+ * (/setup/config merges + hot-reloads the provider). Makes the extension
+ * settings the single source of truth — the popup and Core then agree on
+ * the provider. Silent no-op when Core is offline or unconfigured.
+ */
+export async function syncConfigToCore(cfg: { provider: string; model: string; apiKey: string; baseUrl?: string }): Promise<boolean> {
+  const base = await getCoreBase();
+  if (!base) return false;
+  try {
+    const resp = await fetch(`${base}/setup/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // 'generic' maps to Core's openai-compatible (user-supplied baseUrl)
+        provider: cfg.provider === 'generic' ? 'openai-compatible' : cfg.provider,
+        model: cfg.model,
+        apiKey: cfg.apiKey,
+        baseUrl: cfg.baseUrl ?? '',
+      }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** One-line tag summary for the floating panel. */
 export function formatTags(tags: JdTags): string {
   const parts: string[] = [];

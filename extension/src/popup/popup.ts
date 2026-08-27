@@ -2,7 +2,7 @@
  * Popup: Core service health + usage hints. All heavy lifting happens in
  * content scripts; the popup is a status surface.
  */
-import { CoreClient } from '../core-client.js';
+import { CoreClient, syncConfigToCore } from '../core-client.js';
 
 const statusEl = document.getElementById('status');
 if (!statusEl) throw new Error('popup: missing #status');
@@ -21,7 +21,22 @@ async function refresh(): Promise<void> {
   }
 
   try {
-    const health = await client.health();
+    let health = await client.health();
+    // Single source of truth: the extension settings win. When Core runs
+    // with a different provider, push the extension config over and re-read.
+    if (directProvider && health.provider !== directProvider) {
+      const data = await chrome.storage.local.get('tomihunt-llm-config');
+      const cfg = data['tomihunt-llm-config'] as { model?: string; apiKey?: string; baseUrl?: string } | undefined;
+      if (cfg?.apiKey) {
+        await syncConfigToCore({
+          provider: directProvider,
+          model: cfg.model ?? '',
+          apiKey: cfg.apiKey,
+          baseUrl: cfg.baseUrl,
+        });
+        health = await client.health();
+      }
+    }
     statusEl.innerHTML = `
       <div class="row"><span>模式</span><span class="ok">完整模式</span></div>
       <div class="row"><span>Core 服务</span><span class="ok">在线</span></div>
