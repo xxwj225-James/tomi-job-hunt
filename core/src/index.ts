@@ -3,7 +3,7 @@
  *
  *   config → logger → provider → queue → HTTP + WS (127.0.0.1 only)
  */
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { serve } from '@hono/node-server';
@@ -18,7 +18,17 @@ import { registerSetupRoutes } from './http/setup.js';
 import { JdStore } from './jd/store.js';
 import { Board } from './jd/board.js';
 import { hasClaudeCredentials } from './llm/claude-code.js';
+import { buildUpdateCheck, fetchRemoteVersion, type UpdateCheck } from './version.js';
 import type { ChatProvider, LLMConfig } from './types.js';
+
+/** Repo-hosted version manifest — overridable for mirrors/self-hosting. */
+const VERSION_URL =
+  process.env.TOMI_VERSION_URL ??
+  'https://raw.githubusercontent.com/<your-name>/tomi-job-hunt/main/version.json';
+
+const CURRENT_VERSION = (
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+).version;
 
 async function main(): Promise<void> {
   loadDotEnv();
@@ -49,9 +59,32 @@ async function main(): Promise<void> {
   const store = new JdStore(join(cfg.configDir, 'data'), log.child('store'));
   const board = new Board(cfg.configDir, log.child('board'));
 
+  // OTA: non-blocking version check at startup + every 6h. Never blocks boot.
+  const updateRef: { current: UpdateCheck } = {
+    current: buildUpdateCheck(CURRENT_VERSION, null),
+  };
+  const pollVersion = async (): Promise<void> => {
+    const remote = await fetchRemoteVersion(VERSION_URL);
+    updateRef.current = buildUpdateCheck(CURRENT_VERSION, remote);
+    if (updateRef.current.updateAvailable) {
+      log.info(`update available: ${remote!.version} — ${remote!.releaseUrl ?? '(see version.json)'}`);
+    }
+  };
+  void pollVersion();
+  setInterval(() => void pollVersion(), 6 * 3600 * 1000).unref();
+
   const app = new Hono();
   const ws = createWsHub(app, log.child('ws'));
-  registerRoutes(app, { provider: providerView, queue, log, ws, store, configDir: cfg.configDir, board });
+  registerRoutes(app, {
+    provider: providerView,
+    queue,
+    log,
+    ws,
+    store,
+    configDir: cfg.configDir,
+    board,
+    update: () => updateRef.current,
+  });
   registerSetupRoutes(app, {
     configDir: cfg.configDir,
     log: log.child('setup'),

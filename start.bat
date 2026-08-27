@@ -20,6 +20,13 @@ echo [TomiHunt] 手动访问: http://127.0.0.1:3000/setup
 if not exist node_modules (
   echo [TomiHunt] 首次运行，正在安装依赖（约1-2分钟）...
   call npm install
+) else (
+  rem OTA: git-based installs pull the latest code on every start
+  if exist .git (
+    echo [TomiHunt] 正在检查更新...
+    git pull --ff-only >nul 2>nul
+    if not errorlevel 1 call npm install >nul 2>nul
+  )
 )
 
 call npm start -w core

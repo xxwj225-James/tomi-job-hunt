@@ -36,6 +36,7 @@ import { mdToHtml, tailorResume } from '../jd/tailor.js';
 import { interviewPrep } from '../jd/interview.js';
 import { Board, BOARD_STATUSES } from '../jd/board.js';
 import { draftColdEmail, huntCompanies } from '../hunt/reverse.js';
+import type { UpdateCheck } from '../version.js';
 import type { JdStore } from '../jd/store.js';
 
 const chatRequestSchema = z.object({
@@ -61,6 +62,8 @@ export interface RouteDeps {
   /** Config dir (~/.tomi-job-hunt) — resume files / board.md live here. */
   configDir: string;
   board: Board;
+  /** OTA update check accessor (refreshed by the version-check poller). */
+  update?: () => UpdateCheck;
 }
 
 const boardAddSchema = z.object({
@@ -127,6 +130,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       provider: deps.provider.id,
       queue: { active: deps.queue.active, pending: deps.queue.pending },
       wsClients: deps.ws.clientCount,
+      update: deps.update?.(),
     }),
   );
 

@@ -104,6 +104,16 @@ npm run build -w extension
 - 仅岗位描述（JD）与必要的提示词会发送给你选择的 LLM API
 - 无遥测、无统计上报、无云端服务器。详见 [docs/privacy.md](docs/privacy.md)
 
+## 🔄 自动更新（OTA）
+
+- **插件**：每次打开 popup 自动检查仓库 `version.json`（每日一次），有新版本在 popup 顶部提示
+- **本地 Core**：启动时 + 每 6 小时检查一次新版本，结果在 `/health` 与 setup 页显示；`start.bat` 每次启动前自动 `git pull` 拉取最新代码
+- 将来插件上架 Chrome 商店后由浏览器自动静默更新
+
+## 💝 支持项目
+
+TomiHunt 永久免费开源（无广告、无遥测）。如果你愿意支持作者持续开发，可以通过推广链接购买云服务（作者获得返佣，你的价格不变）或请作者喝咖啡——见 [docs/support.md](docs/support.md)。
+
 ## ⚖️ 法律与合规
 
 TomiHunt 是**用户端本地增强工具**：只解析你正在浏览的页面，不做批量爬取；共享管线在代码层面硬性排除原始 JD 文本与个人信息（`buildSharedIntel` 只允许结构化标签与事实通过）。
