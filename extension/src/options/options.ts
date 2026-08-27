@@ -23,6 +23,7 @@ const resumeEl = $<HTMLTextAreaElement>('resume');
 const resumeFileEl = $<HTMLInputElement>('resume-file');
 const sendModeEl = $<HTMLSelectElement>('sendMode');
 const smartReplyEl = $<HTMLSelectElement>('smartReply');
+const storageHintEl = $<HTMLDivElement>('storage-hint');
 
 function showStatus(ok: boolean, message: string): void {
   statusEl.textContent = message;
@@ -152,6 +153,25 @@ $('import-file').addEventListener('change', async () => {
     if (parsed['tomihunt-smart-reply'] === 'off') smartReplyEl.value = 'off';
     await chrome.storage.local.set(parsed);
     updateModelHint();
+
+// --- Storage diagnostics: show the instance ID + what this instance holds ---
+void (async () => {
+  try {
+    const data = await chrome.storage.local.get(null);
+    const keys = Object.keys(data).filter((k) => k.startsWith('tomihunt-'));
+    const id = chrome.runtime.id;
+    if (keys.length === 0) {
+      storageHintEl.textContent =
+        `⚠️ 本插件实例（ID: ${id}）的存储是空的。` +
+        '如果你之前在「另一个文件夹」加载过插件并保存过数据：数据还在那个旧实例里（开发模式下 Chrome 按加载目录识别插件）。' +
+        '解决方法：回到旧文件夹加载 → 设置页「导出配置备份」→ 回到这里「导入配置备份」。';
+    } else {
+      storageHintEl.textContent = `插件实例 ID: ${id} · 本实例已存数据: ${keys.length} 项`;
+    }
+  } catch {
+    // storage unavailable
+  }
+})();
     showStatus(true, '✅ 已导入并恢复配置与简历。点「保存」再确认一次即可。');
   } catch (err) {
     showStatus(false, `❌ 导入失败: ${(err as Error).message}`);
