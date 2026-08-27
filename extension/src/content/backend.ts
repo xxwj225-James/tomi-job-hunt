@@ -63,26 +63,30 @@ export async function backendTag(jd: JdLike): Promise<JdTags> {
 }
 
 export async function backendGreeting(jd: JdLike): Promise<GreetingResult> {
+  // The extension's stored resume wins; Core falls back to its own resume.md
+  // only when the extension has none.
+  const resume = await loadResume();
   if ((await detectBackend()) === 'core') {
-    // Core loads ~/.tomi-job-hunt/resume.md itself
-    return client.greeting({ jd: { ...jd, hrName: jd.hrName } });
+    return client.greeting({ jd: { ...jd, hrName: jd.hrName }, resume });
   }
-  return directGreeting(jd, await loadResume());
+  return directGreeting(jd, resume);
 }
 
 export async function backendMatch(jd: JdLike) {
+  const resume = await loadResume();
   if ((await detectBackend()) === 'core') {
-    return corePost<Record<string, unknown>>('/v1/match', { jd });
+    return corePost<Record<string, unknown>>('/v1/match', { jd, resume });
   }
-  return directMatch(jd, await loadResume());
+  return directMatch(jd, resume);
 }
 
 export async function backendInterview(jd: JdLike) {
+  const resume = await loadResume();
   if ((await detectBackend()) === 'core') {
     return corePost<{ questions: Array<{ q: string; intent: string; starHint: string }> }>(
       '/v1/interview-prep',
-      { jd },
+      { jd, resume },
     );
   }
-  return directInterviewPrep(jd, await loadResume());
+  return directInterviewPrep(jd, resume);
 }

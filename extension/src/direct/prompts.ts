@@ -148,7 +148,10 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
   "gaps": ["短板项，每条 ≤30 字"],
   "risks": ["避坑提示；没有则空数组"]
 }
-规则：不编造简历里没有的经历；gaps 只列 JD 明确要求的差距。`;
+规则：
+- 评分校准：核心技能与年限匹配即 ≥60 分（即使行业背景不符，行业仅占 15% 权重，不能把总分清零）；完全匹配才给 90+；总分 0 只用于「JD 核心要求与简历完全无关」的情况
+- strengths 必须引用简历中真实存在的经历；gaps 只列简历中明确缺失或明显不足的项——简历中未提及不等于缺失，可写「简历未体现 xx」但必须单独标注
+- 不编造简历里没有的经历；gaps 只列 JD 明确要求的差距`;
   const result = await directChat([{ role: 'user', content: prompt }]);
   const raw = parseJson<Record<string, unknown>>(result.text);
   return {
