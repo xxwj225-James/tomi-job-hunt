@@ -125,6 +125,16 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
     }
   });
 
+  // --- Key recovery: user-initiated, localhost-only ---
+  // Shows the DECRYPTED key so the user can re-enter it elsewhere (e.g.
+  // after changing the extension's load directory). Never returned by the
+  // regular config GET — this endpoint only exists as an explicit action.
+  app.post('/setup/show-key', async (c) => {
+    const key = await readSecret(configDir);
+    if (!key) return c.json({ apiKey: null, message: '本机没有保存 API Key' }, 404);
+    return c.json({ apiKey: key });
+  });
+
   // --- Connection test (submitted config, not saved) ---
 
   app.post('/setup/test', async (c) => {
