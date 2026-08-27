@@ -283,12 +283,23 @@ export function showTaggedPanel(ctx: CapturedContext, panelTitle: string): void 
       { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
       { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
       { label: '加入看板', onClick: () => void addToBoard(ctx, panelTitle) },
-      { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle) },
+      { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle, true) },
     ],
   });
 }
 
-export async function captureAndShow(ctx: CapturedContext, panelTitle: string): Promise<void> {
+export async function captureAndShow(
+  ctx: CapturedContext,
+  panelTitle: string,
+  force = false,
+): Promise<void> {
+  // Cached analysis: navigating back reuses the tags. Only a page switch
+  // (URL change → content script state belongs to another JD) or an
+  // explicit 重新导入 (force) triggers a fresh analysis.
+  if (!force && ctx.tags && ctx.jd.url === window.location.href) {
+    showTaggedPanel(ctx, panelTitle);
+    return;
+  }
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在导入并分析 JD…'] });
   const backend = await detectBackend();
 
@@ -670,7 +681,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
         ...(result.score >= 85
           ? [{ label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true }]
           : []),
-        { label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) },
+        { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
       ],
     });
   } catch (err) {
@@ -679,7 +690,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
       title: panelTitle,
       rows: [],
       error: `打分失败: ${(err as Error).message}`,
-      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
     });
   }
 }
@@ -737,10 +748,16 @@ export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string
     showPanel({
       title: `${panelTitle} — 面试准备`,
       rows,
-      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
     });
   } catch (err) {
-    showPanel({ state: 'error', title: panelTitle, rows: [], error: `面试准备失败: ${(err as Error).message}` });
+    showPanel({
+      state: 'error',
+      title: panelTitle,
+      rows: [],
+      error: `面试准备失败: ${(err as Error).message}`,
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
+    });
   }
 }
 
