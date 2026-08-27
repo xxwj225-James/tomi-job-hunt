@@ -44,6 +44,49 @@ document.getElementById('open-options')?.addEventListener('click', () => {
   void chrome.runtime.openOptionsPage();
 });
 
+// --- One-click Core launcher (tomihunt:// protocol registered by install-core.bat) ---
+document.getElementById('start-core')?.addEventListener('click', () => {
+  void startCore();
+});
+
+async function startCore(): Promise<void> {
+  const hint = document.getElementById('core-hint');
+  if (!hint) return;
+  const button = document.getElementById('start-core') as HTMLButtonElement | null;
+  try {
+    // Already running?
+    const health = await client.health();
+    hint.style.display = 'block';
+    hint.textContent = '✅ Core 已在运行（完整模式可用）';
+    return;
+  } catch {
+    // not running — launch via protocol
+  }
+  if (button) button.disabled = true;
+  hint.style.display = 'block';
+  hint.textContent = '正在启动…（浏览器会询问一次「打开 TomiHunt」，请允许）';
+  try {
+    window.open('tomihunt://core/start', '_blank');
+  } catch {
+    // protocol handler not registered
+  }
+  // Poll /health for up to 40s (first run may need npm install)
+  for (let i = 0; i < 40; i += 1) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      await client.health();
+      hint.textContent = '✅ 完整模式已启动，重新打开岗位页即可用全部功能';
+      if (button) button.disabled = false;
+      return;
+    } catch {
+      // still starting
+    }
+  }
+  hint.textContent =
+    '未检测到启动。首次使用需运行一次源码包里的 scripts\\install-core.bat 注册启动器（只需一次，之后这里一键启动）。';
+  if (button) button.disabled = false;
+}
+
 // --- OTA version check (daily cache; unpacked installs can't self-update) ---
 const VERSION_URL = 'https://raw.githubusercontent.com/<your-name>/tomi-job-hunt/main/version.json';
 const UPDATE_EL_ID = 'update-hint';

@@ -1,2 +1,6 @@
 # Normalize line endings for cross-platform contributions
 * text=auto eol=lf
+
+# Windows batch/vbs scripts must keep CRLF — cmd.exe misparses LF-only files
+*.bat text eol=crlf
+*.vbs text eol=crlf
