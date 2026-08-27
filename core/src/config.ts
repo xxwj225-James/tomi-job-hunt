@@ -14,6 +14,8 @@ import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import * as nodeProcess from 'node:process';
 import { z } from 'zod';
+import { deleteSecret, readSecret, secretPath, writeSecret } from './security.js';
+import type { Logger } from './logger.js';
 import type { LLMConfig, ProviderId } from './types.js';
 
 /** Default listen port — a cold port on purpose. 3000 collides with
@@ -60,7 +62,6 @@ const PROVIDER_ENUM = [
 const fileConfigSchema = z.object({
   provider: z.enum(PROVIDER_ENUM).optional(),
   model: z.string().optional(),
-  apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
   thinking: z.boolean().optional(),
   temperature: z.number().min(0).max(2).optional(),
@@ -110,14 +111,17 @@ export function loadDotEnv(cwd: string = process.cwd()): void {
   }
 }
 
-export function loadConfig(options?: {
+export async function loadConfig(options?: {
   home?: string;
   env?: NodeJS.ProcessEnv;
-}): AppConfig {
+  /** Silent migration logger (tests pass a silent one). */
+  log?: Logger;
+}): Promise<AppConfig> {
   const env = options?.env ?? process.env;
   const dir = configDir(options?.home, env);
 
   let file: z.infer<typeof fileConfigSchema> = {};
+  let rawFile: Record<string, unknown> = {};
   const path = join(dir, 'config.json');
   if (existsSync(path)) {
     let raw: unknown;
@@ -131,6 +135,7 @@ export function loadConfig(options?: {
       throw new Error(`Invalid ${path}: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
     }
     file = parsed.data;
+    rawFile = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   }
 
   const provider: ProviderId = (env.TOMI_PROVIDER ?? file.provider ?? 'claude-code') as ProviderId;
@@ -141,7 +146,27 @@ export function loadConfig(options?: {
   }
 
   const model = env.TOMI_MODEL ?? file.model ?? DEFAULT_MODEL_BY_PROVIDER[provider];
-  const apiKey = env.ANTHROPIC_API_KEY ?? env.TOMI_API_KEY ?? file.apiKey;
+
+  // The API key NEVER lives in config.json. It is encrypted at rest in
+  // <configDir>/api-key.enc (Windows DPAPI, CurrentUser scope).
+  let apiKey = env.ANTHROPIC_API_KEY ?? env.TOMI_API_KEY ?? (await readSecret(dir));
+
+  // Legacy migration: an apiKey field left over in config.json (pre-0.1.x)
+  // is moved into the encrypted store and stripped from the file.
+  const legacyKey = typeof rawFile.apiKey === 'string' ? rawFile.apiKey : undefined;
+  if (!apiKey && legacyKey) {
+    apiKey = legacyKey;
+    await writeSecret(dir, legacyKey, options?.log ?? silentLog());
+    delete rawFile.apiKey;
+    try {
+      writeFileSync(path, `${JSON.stringify(rawFile, null, 2)}
+`, 'utf8');
+    } catch {
+      // stripping best-effort; the encrypted copy already exists
+    }
+    options?.log?.warn('config: migrated legacy apiKey out of config.json into the encrypted store');
+  }
+
   const baseUrl = env.TOMI_BASE_URL ?? file.baseUrl ?? PROVIDER_PRESETS[provider]?.baseUrl;
 
   const llm: LLMConfig = {
@@ -163,6 +188,11 @@ export function loadConfig(options?: {
       nostr: file.intel?.nostr,
     },
   };
+}
+
+function silentLog(): Logger {
+  // Minimal inline logger to avoid a circular import in the migration path.
+  return { child: () => silentLog(), debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
 }
 
 function intEnv(v: string | undefined): number | undefined {
@@ -206,7 +236,11 @@ export function readConfigFile(dir: string): Record<string, unknown> {
  * preserved), validates the result, and writes it back. Returns the merged
  * raw object. Throws on invalid values.
  */
-export function saveConfigFile(dir: string, patch: ConfigFilePatch): Record<string, unknown> {
+export async function saveConfigFile(
+  dir: string,
+  patch: ConfigFilePatch,
+  log?: Logger,
+): Promise<Record<string, unknown>> {
   const current = readConfigFile(dir);
   const next: Record<string, unknown> = { ...current };
 
@@ -228,10 +262,17 @@ export function saveConfigFile(dir: string, patch: ConfigFilePatch): Record<stri
   if (patch.model !== undefined && String(next.model).trim() === '') delete next.model;
   if (patch.baseUrl !== undefined && String(next.baseUrl).trim() === '') delete next.baseUrl;
 
+  // The API key NEVER touches config.json — it lives in the DPAPI-encrypted
+  // secret file. A legacy key still sitting in the file is migrated to the
+  // secret store instead of being dropped.
+  const legacyKey = typeof next.apiKey === 'string' && next.apiKey.trim() !== '' ? next.apiKey.trim() : undefined;
+  delete next.apiKey;
   if (patch.clearApiKey) {
-    delete next.apiKey;
+    deleteSecret(dir);
   } else if (patch.apiKey !== undefined && patch.apiKey.trim() !== '') {
-    next.apiKey = patch.apiKey.trim();
+    await writeSecret(dir, patch.apiKey.trim(), log ?? silentLog());
+  } else if (legacyKey) {
+    await writeSecret(dir, legacyKey, log ?? silentLog());
   }
 
   // Validate before persisting: reuse the same schema as loadConfig.

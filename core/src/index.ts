@@ -10,6 +10,8 @@ import { createServer } from 'node:net';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { PORT_RETRIES, loadConfig, loadDotEnv, readConfigFile } from './config.js';
+import { secretPath } from './security.js';
+import { existsSync } from 'node:fs';
 import { Logger } from './logger.js';
 import { TaskQueue } from './queue.js';
 import { createChatProvider, createChatProviderSafe } from './llm/factory.js';
@@ -76,7 +78,7 @@ export async function resolvePort(
 
 async function main(): Promise<void> {
   loadDotEnv();
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const log = new Logger(cfg.logLevel, 'core');
   const port = await resolvePort(cfg.configDir, cfg.port, log);
 
@@ -177,7 +179,7 @@ function maybeOpenSetupBrowser(configDir: string, llm: LLMConfig, log: Logger, p
   if (process.env.TOMI_NO_OPEN_BROWSER === '1') return;
   const raw = readConfigFile(configDir);
   const claudeCodeReady = llm.provider === 'claude-code' && hasClaudeCredentials();
-  const hasKey = Boolean(raw.apiKey) || Boolean(llm.apiKey) || claudeCodeReady;
+  const hasKey = existsSync(secretPath(configDir)) || Boolean(llm.apiKey) || claudeCodeReady;
   if (hasKey) return;
   const url = `http://127.0.0.1:${port}/setup`;
   log.info(`no LLM configured — opening setup wizard: ${url}`);

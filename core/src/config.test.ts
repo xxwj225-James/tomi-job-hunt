@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig, readConfigFile, saveConfigFile } from './config.js';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -12,9 +12,9 @@ function makeHomeWithConfig(config: unknown): string {
 }
 
 describe('loadConfig', () => {
-  it('returns defaults when nothing is configured', () => {
+  it('returns defaults when nothing is configured', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
-    const cfg = loadConfig({ home: dir, env: {} });
+    const cfg = await loadConfig({ home: dir, env: {} });
     expect(cfg.llm.provider).toBe('claude-code');
     expect(cfg.llm.model).toBe('claude-sonnet-5');
     expect(cfg.llm.concurrency).toBe(2);
@@ -22,14 +22,14 @@ describe('loadConfig', () => {
     expect(cfg.logLevel).toBe('info');
   });
 
-  it('reads config.json from home dir', () => {
+  it('reads config.json from home dir', async () => {
     const home = makeHomeWithConfig({
       provider: 'claude-api',
       model: 'claude-haiku-4-5-20251001',
       concurrency: 4,
       port: 4000,
     });
-    const cfg = loadConfig({ home, env: {} });
+    const cfg = await loadConfig({ home, env: {} });
     expect(cfg.llm.provider).toBe('claude-api');
     expect(cfg.llm.model).toBe('claude-haiku-4-5-20251001');
     expect(cfg.llm.concurrency).toBe(4);
@@ -37,9 +37,9 @@ describe('loadConfig', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it('env vars override config.json', () => {
+  it('env vars override config.json', async () => {
     const home = makeHomeWithConfig({ provider: 'claude-api', port: 4000 });
-    const cfg = loadConfig({
+    const cfg = await loadConfig({
       home,
       env: { TOMI_PROVIDER: 'openai-compatible', TOMI_PORT: '5000', ANTHROPIC_API_KEY: 'sk-test' },
     });
@@ -50,25 +50,25 @@ describe('loadConfig', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it('resolves presets for deepseek/kimi/qwen', () => {
+  it('resolves presets for deepseek/kimi/qwen', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
-    const deepseek = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'deepseek', TOMI_API_KEY: 'sk-ds' } });
+    const deepseek = await loadConfig({ home: dir, env: { TOMI_PROVIDER: 'deepseek', TOMI_API_KEY: 'sk-ds' } });
     expect(deepseek.llm.baseUrl).toBe('https://api.deepseek.com/v1');
     expect(deepseek.llm.model).toBe('deepseek-v4-flash');
     expect(deepseek.llm.apiKey).toBe('sk-ds');
 
-    const kimi = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'kimi' } });
+    const kimi = await loadConfig({ home: dir, env: { TOMI_PROVIDER: 'kimi' } });
     expect(kimi.llm.baseUrl).toBe('https://api.moonshot.cn/v1');
     expect(kimi.llm.model).toBe('kimi-k2.6');
 
-    const qwen = loadConfig({ home: dir, env: { TOMI_PROVIDER: 'qwen' } });
+    const qwen = await loadConfig({ home: dir, env: { TOMI_PROVIDER: 'qwen' } });
     expect(qwen.llm.baseUrl).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
     expect(qwen.llm.model).toBe('qwen3.7-plus');
   });
 
-  it('TOMI_BASE_URL and TOMI_MODEL override presets; thinking from config.json', () => {
+  it('TOMI_BASE_URL and TOMI_MODEL override presets; thinking from config.json', async () => {
     const home = makeHomeWithConfig({ provider: 'deepseek', thinking: true });
-    const cfg = loadConfig({
+    const cfg = await loadConfig({
       home,
       env: { TOMI_BASE_URL: 'http://127.0.0.1:9999/v1', TOMI_MODEL: 'deepseek-v4-pro' },
     });
@@ -78,66 +78,88 @@ describe('loadConfig', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  it('throws on unknown provider', () => {
+  it('throws on unknown provider', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
-    expect(() => loadConfig({ home: dir, env: { TOMI_PROVIDER: 'nope' } })).toThrow(/Unknown TOMI_PROVIDER/);
+    await expect(loadConfig({ home: dir, env: { TOMI_PROVIDER: 'nope' } })).rejects.toThrow(/Unknown TOMI_PROVIDER/);
   });
 
-  it('throws on invalid config.json', () => {
+  it('throws on invalid config.json', async () => {
     const home = makeHomeWithConfig({ concurrency: 99 });
-    expect(() => loadConfig({ home, env: {} })).toThrow(/Invalid/);
+    await expect(loadConfig({ home, env: {} })).rejects.toThrow(/Invalid/);
     rmSync(home, { recursive: true, force: true });
   });
 });
 
 describe('saveConfigFile', () => {
-  it('writes a fresh config.json', () => {
+  it('writes config.json WITHOUT the key; the key goes to the encrypted store', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    const cfgDir = join(dir, '.tomi-job-hunt');
     try {
-      saveConfigFile(dir, { provider: 'deepseek', apiKey: 'sk-new', model: 'deepseek-v4-flash' });
-      const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
+      await saveConfigFile(cfgDir, { provider: 'deepseek', apiKey: 'sk-new', model: 'deepseek-v4-flash' });
+      const raw = JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')) as Record<string, unknown>;
       expect(raw.provider).toBe('deepseek');
-      expect(raw.apiKey).toBe('sk-new');
+      expect(raw.apiKey).toBeUndefined(); // never in config.json
+      const cfg = await loadConfig({ home: dir, env: {} });
+      expect(cfg.llm.apiKey).toBe('sk-new'); // decryptable from the secret file
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('merges into an existing config and preserves unknown fields', () => {
+  it('merges into an existing config and preserves unknown fields', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    const cfgDir = join(dir, '.tomi-job-hunt');
     try {
+      mkdirSync(cfgDir, { recursive: true });
       writeFileSync(
-        join(dir, 'config.json'),
+        join(cfgDir, 'config.json'),
         JSON.stringify({ provider: 'kimi', apiKey: 'sk-old', intel: { nostr: { relays: ['wss://x'] } } }),
       );
-      saveConfigFile(dir, { provider: 'qwen', model: 'qwen3.7-plus' });
-      const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
+      await saveConfigFile(cfgDir, { provider: 'qwen', model: 'qwen3.7-plus' });
+      const raw = JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')) as Record<string, unknown>;
       expect(raw.provider).toBe('qwen');
-      expect(raw.apiKey).toBe('sk-old'); // not touched
+      expect(raw.apiKey).toBeUndefined(); // never in config.json
+      expect((await loadConfig({ home: dir, env: {} })).llm.apiKey).toBe('sk-old'); // migrated to secret
       expect((raw.intel as { nostr: { relays: string[] } }).nostr.relays).toEqual(['wss://x']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('empty apiKey keeps the stored key; clearApiKey erases it', () => {
+  it('empty apiKey keeps the stored secret; clearApiKey erases it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    const cfgDir = join(dir, '.tomi-job-hunt');
     try {
-      writeFileSync(join(dir, 'config.json'), JSON.stringify({ provider: 'kimi', apiKey: 'sk-old' }));
-      saveConfigFile(dir, { apiKey: '   ' });
-      expect(readConfigFile(dir).apiKey).toBe('sk-old');
-      saveConfigFile(dir, { clearApiKey: true });
-      expect(readConfigFile(dir).apiKey).toBeUndefined();
+      await saveConfigFile(cfgDir, { provider: 'kimi', apiKey: 'sk-old' });
+      await saveConfigFile(cfgDir, { apiKey: '   ' });
+      expect((await loadConfig({ home: dir, env: {} })).llm.apiKey).toBe('sk-old');
+      await saveConfigFile(cfgDir, { clearApiKey: true });
+      expect((await loadConfig({ home: dir, env: {} })).llm.apiKey).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('rejects invalid values', () => {
+  it('migrates a legacy apiKey out of config.json into the encrypted store', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
     try {
-      expect(() => saveConfigFile(dir, { concurrency: 999 })).toThrow(/Invalid/);
-      expect(() => saveConfigFile(dir, { provider: 'nope' as never })).toThrow(/Invalid/);
+      mkdirSync(join(dir, '.tomi-job-hunt'), { recursive: true });
+      writeFileSync(join(dir, '.tomi-job-hunt', 'config.json'), JSON.stringify({ provider: 'kimi', apiKey: 'sk-legacy' }));
+      const cfg = await loadConfig({ home: dir, env: {} });
+      expect(cfg.llm.apiKey).toBe('sk-legacy');
+      const raw = JSON.parse(readFileSync(join(dir, '.tomi-job-hunt', 'config.json'), 'utf8')) as Record<string, unknown>;
+      expect(raw.apiKey).toBeUndefined(); // stripped
+      expect(existsSync(join(dir, '.tomi-job-hunt', 'api-key.enc'))).toBe(true); // encrypted copy
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid values', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tomi-save-'));
+    try {
+      await expect(saveConfigFile(dir, { concurrency: 999 })).rejects.toThrow(/Invalid/);
+      await expect(saveConfigFile(dir, { provider: 'nope' as never })).rejects.toThrow(/Invalid/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

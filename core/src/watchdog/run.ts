@@ -59,7 +59,7 @@ function notify(title: string, body: string): void {
 
 export async function runWatchdog(configDirOverride?: string): Promise<{ jobs: JobEntry[]; digestPath: string }> {
   loadDotEnv();
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const log = new Logger(cfg.logLevel, 'watchdog');
   const configDir = configDirOverride ?? cfg.configDir;
   const workDir = join(configDir, 'work');

@@ -18,7 +18,7 @@ import { generateIntelKey, publishIntel, subscribeIntel } from './nostr.js';
 
 async function main(): Promise<void> {
   loadDotEnv();
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const log = new Logger(cfg.logLevel, 'intel');
   const cmd = process.argv[2] ?? 'export';
   const store = new JdStore(join(cfg.configDir, 'data'), log.child('store'));

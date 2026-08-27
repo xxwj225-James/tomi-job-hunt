@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import type { ChatProvider, LLMConfig, ProviderId } from '../types.js';
 import type { Logger } from '../logger.js';
 import { PROVIDER_IDS, PROVIDER_PRESETS, readConfigFile, saveConfigFile } from '../config.js';
+import { readSecret, secretPath } from '../security.js';
 import { loadResumeFile } from '../jd/resume-files.js';
 
 export interface SetupDeps {
@@ -71,7 +72,8 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
     const raw = readConfigFile(configDir);
     const provider = (raw.provider as ProviderId | undefined) ?? 'claude-code';
     const model = (raw.model as string | undefined) ?? '';
-    const { apiKeySet, apiKeyMasked } = maskKey(raw.apiKey as string | undefined);
+    const apiKeySet = existsSync(secretPath(configDir));
+    const apiKeyMasked = apiKeySet ? 'sk-****' : undefined;
     const baseUrl = (raw.baseUrl as string | undefined) ?? '';
     return c.json({
       configDir,
@@ -100,20 +102,21 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
     }
     const patch = parsed.data as Parameters<typeof saveConfigFile>[1];
     try {
-      const saved = saveConfigFile(configDir, patch);
+      const saved = await saveConfigFile(configDir, patch, log);
       // Hot-reload the running provider so the change applies without a restart.
+      // The key comes from the encrypted secret store — never from config.json.
       const provider = (saved.provider as ProviderId) ?? 'claude-code';
       const llm: LLMConfig = {
         provider,
         model: (saved.model as string | undefined) || PROVIDER_PRESETS[provider]?.defaultModel,
-        apiKey: saved.apiKey as string | undefined,
+        apiKey: await readSecret(configDir),
         baseUrl: (saved.baseUrl as string | undefined) ?? PROVIDER_PRESETS[provider]?.baseUrl,
         thinking: saved.thinking === true,
         temperature: saved.temperature as number | undefined,
         concurrency: (saved.concurrency as number) ?? 2,
       };
       deps.reloadProvider(llm);
-      const { apiKeySet } = maskKey(saved.apiKey as string | undefined);
+      const apiKeySet = existsSync(secretPath(configDir));
       log.info(`setup: config saved (provider: ${provider}, apiKeySet: ${apiKeySet})`);
       return c.json({ ok: true, apiKeySet });
     } catch (err) {
