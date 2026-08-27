@@ -14,6 +14,8 @@ export const client = new CoreClient();
 
 /** Support/donation page (affiliate links) — footer of every panel state. */
 const SUPPORT_URL = 'https://github.com/xxwj225-James/tomi-job-hunt/blob/main/docs/support.md';
+/** Author's other product — subtle referral next to the support link. */
+const TOMILITE_URL = 'https://github.com/xxwj225-James/tomilite';
 
 /**
  * Removes elements hidden by CSS from a detached clone, so textContent stays
@@ -241,7 +243,7 @@ export function showPanel(content: {
       .join('') ?? '';
   // Support footer appears on EVERY panel state (tags / match / pitch /
   // interview) — visible placement, never injected into AI-generated text.
-  const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（免费使用 · 推广返佣/打赏）</div>`;
+  const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（推广返佣/打赏） · <a href="${TOMILITE_URL}" target="_blank" rel="noopener">TomiLite</a>（作者的 AI 助手）</div>`;
   setPanelHtml(
     `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}${inputHtml}<div style="margin-top:8px">${actionsHtml}</div>${supportHtml}`,
   );
