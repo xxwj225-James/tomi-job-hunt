@@ -92,7 +92,7 @@ export function extractZhipinJdDom(doc: Document): ZhipinJd | null {
 }
 
 export async function extractZhipinJd(doc: Document): Promise<ZhipinJd | null> {
-  const jid = jidFromUrl(doc.location?.href ?? '');
+  const jid = jidFromUrl(doc.location?.href ?? '') ?? jidFromDom(doc);
   if (jid) {
     try {
       const resp = await fetch(`${DETAIL_API}?jid=${jid}&lid=&securityId=`, { credentials: 'include' });
@@ -120,12 +120,50 @@ function toInput(jd: ZhipinJd): JdCaptureInput {
   };
 }
 
-async function main(): Promise<void> {
-  const jd = await extractZhipinJd(document);
-  if (!jd) return; // not a job detail page (e.g. 404 / login wall)
+/** Tries to locate a jid in the DOM when the URL carries none (SPA detail). */
+function jidFromDom(doc: Document): string | null {
+  for (const attr of ['data-jid', 'data-jobid', 'data-job-id']) {
+    for (const el of doc.querySelectorAll(`[${attr}]`)) {
+      const value = el.getAttribute(attr);
+      if (value && /^\d+$/.test(value)) return value;
+    }
+  }
+  const link = doc.querySelector('a[href*="job_detail"]');
+  const match = link?.getAttribute('href')?.match(/job_detail\/([^/.?#]+)/);
+  return match?.[1] ?? null;
+}
 
-  const ctx = { jd: toInput(jd) };
-  await captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
+async function main(): Promise<void> {
+  const isListSpa = /\/web\/geek\/job\b/.test(window.location.href) && !/job_detail/.test(window.location.href);
+
+  if (!isListSpa) {
+    const jd = await extractZhipinJd(document);
+    if (!jd) return; // not a job detail page (e.g. 404 / login wall)
+    const ctx = { jd: toInput(jd) };
+    await captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
+    return;
+  }
+
+  // SPA list mode (/web/geek/jobs): clicking a card opens the JD detail in
+  // the same page WITHOUT a URL change. Watch the DOM, and whenever the
+  // visible JD's identity changes, analyze the new one.
+  let activeKey: string | null = null;
+  const poll = async (): Promise<void> => {
+    const jd = await extractZhipinJd(document);
+    if (!jd) return; // no detail panel open yet / closed
+    const key = `${jd.title}|${jd.company}`;
+    if (key === activeKey) return; // same JD still on screen
+    activeKey = key;
+    const ctx = { jd: toInput(jd) };
+    void captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
+  };
+  let ticks = 0;
+  const timer = setInterval(() => {
+    ticks += 1;
+    if (ticks > 150) clearInterval(timer); // ~5 min lifetime, like zhipin-list
+    void poll();
+  }, 2000);
+  void poll();
 }
 
 // Auto-run only in the real browser (not in vitest/jsdom imports).

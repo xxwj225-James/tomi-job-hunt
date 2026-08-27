@@ -290,15 +290,22 @@ export function showTaggedPanel(ctx: CapturedContext, panelTitle: string): void 
   });
 }
 
+/** Identity of the JD the last completed analysis belongs to. */
+let lastCapturedKey: string | null = null;
+
+function jdKey(jd: JdCaptureInput): string {
+  return `${jd.title}|${jd.company}`;
+}
+
 export async function captureAndShow(
   ctx: CapturedContext,
   panelTitle: string,
   force = false,
 ): Promise<void> {
-  // Cached analysis: navigating back reuses the tags. Only a page switch
-  // (URL change → content script state belongs to another JD) or an
-  // explicit 重新导入 (force) triggers a fresh analysis.
-  if (!force && ctx.tags && ctx.jd.url === window.location.href) {
+  // Cached analysis: navigating back reuses the tags. Identity is CONTENT-
+  // based (title|company), not URL — Boss直聘's jobs page is an SPA where
+  // switching JDs keeps the URL unchanged. 重新导入 (force) always re-runs.
+  if (!force && ctx.tags && jdKey(ctx.jd) === lastCapturedKey) {
     showTaggedPanel(ctx, panelTitle);
     return;
   }
@@ -337,6 +344,7 @@ export async function captureAndShow(
           clearInterval(timer);
           ctx.tags = event.tags;
           if (event.tags) {
+            lastCapturedKey = jdKey(ctx.jd);
             showTaggedPanel(ctx, panelTitle);
           } else {
             showPanel({
@@ -364,6 +372,7 @@ export async function captureAndShow(
   try {
     const tags = await backendTag(ctx.jd);
     ctx.tags = tags;
+    lastCapturedKey = jdKey(ctx.jd);
     showTaggedPanel(ctx, panelTitle);
   } catch (err) {
     showPanel({
