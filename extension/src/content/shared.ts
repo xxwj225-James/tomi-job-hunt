@@ -654,6 +654,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
     };
     const rows = [
       `综合得分 ${result.score} 分 · ${result.verdict}`,
+      ...(result.score >= 85 ? ['🎯 匹配度高，可直接生成打招呼语'] : []),
       ...(result.strengths.length > 0 ? ['', '✅ 优势:'] : []),
       ...result.strengths.map((s) => `  · ${s}`),
       ...(result.gaps.length > 0 ? ['', '⚠️ 短板:'] : []),
@@ -665,11 +666,21 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
       title: `${panelTitle} — 匹配度`,
       rows,
       actions: [
+        // High fit ⇒ straight to the pitch, no navigation detour.
+        ...(result.score >= 85
+          ? [{ label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true }]
+          : []),
         { label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) },
       ],
     });
   } catch (err) {
-    showPanel({ state: 'error', title: panelTitle, rows: [], error: `打分失败: ${(err as Error).message}` });
+    showPanel({
+      state: 'error',
+      title: panelTitle,
+      rows: [],
+      error: `打分失败: ${(err as Error).message}`,
+      actions: [{ label: '返回', onClick: () => void captureAndShow(ctx, panelTitle) }],
+    });
   }
 }
 
