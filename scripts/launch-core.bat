@@ -6,8 +6,13 @@ cd /d "%~dp0.."
 rem Already running? Leave it alone. Must be an actual TomiHunt response
 rem (curl -f fails on 404; findstr matches the JSON body) - a random other
 rem app occupying the port must NOT stop the launch.
-curl -sf --max-time 2 http://127.0.0.1:3000/health 2>nul | findstr /c:"ok" >nul 2>nul
-if not errorlevel 1 exit /b 0
+rem Probe the auto-selected ports (34567-34570) - idempotent, works
+rem even when another app owns one of them.
+for %%p in (34567 34568 34569 34570) do (
+  curl -sf --max-time 2 http://127.0.0.1:%%p/health 2>nul | findstr /c:"ok" >nul 2>nul
+  if not errorlevel 1 exit /b 0
+)
+
 
 where node >nul 2>nul
 if errorlevel 1 (

@@ -6,7 +6,7 @@
  * board); otherwise fall back to direct-mode (LLM APIs called straight
  * from the extension, API key configured in the options page).
  */
-import { CORE_BASE, CoreClient } from '../core-client.js';
+import { CORE_BASE as CORE_BASE_FALLBACK, getCoreBase, CoreClient } from '../core-client.js';
 import { directGreeting, directInterviewPrep, directMatch, directTagJd } from '../direct/prompts.js';
 import { loadResume } from '../direct/resume.js';
 import type { GreetingResult, JdTags } from '../types.js';
@@ -22,7 +22,8 @@ export async function detectBackend(): Promise<Backend> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 1500);
-    const resp = await fetch(`${CORE_BASE}/health`, { signal: ctrl.signal });
+    const base = (await getCoreBase()) ?? CORE_BASE_FALLBACK;
+    const resp = await fetch(`${base}/health`, { signal: ctrl.signal });
     clearTimeout(timer);
     cached = resp.ok ? 'core' : 'direct';
   } catch {
@@ -43,7 +44,8 @@ export interface JdLike {
 }
 
 async function corePost<T>(path: string, body: unknown): Promise<T> {
-  const resp = await fetch(`${CORE_BASE}${path}`, {
+  const base = (await getCoreBase()) ?? CORE_BASE_FALLBACK;
+  const resp = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

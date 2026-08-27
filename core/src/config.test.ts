@@ -18,7 +18,7 @@ describe('loadConfig', () => {
     expect(cfg.llm.provider).toBe('claude-code');
     expect(cfg.llm.model).toBe('claude-sonnet-5');
     expect(cfg.llm.concurrency).toBe(2);
-    expect(cfg.port).toBe(3000);
+    expect(cfg.port).toBe(34567);
     expect(cfg.logLevel).toBe('info');
   });
 

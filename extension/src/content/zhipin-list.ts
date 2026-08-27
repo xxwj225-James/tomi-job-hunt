@@ -8,7 +8,7 @@
  *    against the local resume via /v1/match → score badge on the card
  *    (lazy + cost-controlled: only cards the user asks about)
  */
-import { CORE_BASE } from '../core-client.js';
+import { CORE_BASE, getCoreBase } from '../core-client.js';
 import { client, showPanel } from './shared.js';
 import type { JdCaptureInput } from '../types.js';
 
@@ -130,7 +130,8 @@ async function scoreCard(card: ListCard, btn: HTMLButtonElement): Promise<void> 
       salaryText: card.salaryText,
       requirements: card.brief,
     };
-    const resp = await fetch(`${CORE_BASE}/v1/match`, {
+    const base = (await getCoreBase()) ?? CORE_BASE;
+    const resp = await fetch(`${base}/v1/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jd }),

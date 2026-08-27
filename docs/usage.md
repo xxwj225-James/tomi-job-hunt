@@ -48,7 +48,7 @@ npm install
 
 ## 第 2 步：配置 LLM
 
-> 💡 **推荐方式（无需手写配置文件）**：启动 Core 后打开 `http://127.0.0.1:3000/setup`
+> 💡 **推荐方式（无需手写配置文件）**：启动 Core 后打开 `http://127.0.0.1:34567/setup`（端口被占用会自动顺延 34568-34570）
 > 设置向导——网页里选择服务商、粘贴 API Key、测试连接、上传简历，一键完成。
 > **首次启动且未配置 API Key 时，Core 会自动打开该页面。**
 
@@ -94,7 +94,7 @@ export TOMI_API_KEY=sk-你的密钥
 # 可选覆盖：
 # export TOMI_MODEL=deepseek-v4-pro
 # export TOMI_BASE_URL=https://自定义网关/v1
-# export TOMI_PORT=3000
+# export TOMI_PORT=4000   (高级：显式指定端口)
 ```
 
 Claude 系（claude-code / claude-api）用 `ANTHROPIC_API_KEY`。
@@ -111,7 +111,7 @@ Claude 系（claude-code / claude-api）用 `ANTHROPIC_API_KEY`。
 | `maxTokens` | — | 4096 | 单次输出上限（另有 provider 上限：deepseek 16000，其他 8192） |
 | `temperature` | — | — | 0~2；deepseek 思考模式下无效 |
 | `concurrency` | `TOMI_CONCURRENCY` | 2 | 并发 LLM 调用数；claude-code 每次调用会起一个子进程，不建议调太高 |
-| `port` | `TOMI_PORT` | 3000 | 仅绑定 127.0.0.1 |
+| `port` | `TOMI_PORT` | 34567 | 仅绑定 127.0.0.1；被占用自动顺延 34568-34570，普通用户无需关心 |
 | `logLevel` | `TOMI_LOG_LEVEL` | `info` | debug / info / warn / error |
 
 优先级：环境变量 > config.json > 内置默认。
@@ -148,10 +148,10 @@ npm start -w core
 npm run dev -w core
 ```
 
-看到 `listening on http://127.0.0.1:3000 (provider: deepseek, ...)` 即启动成功。验证：
+看到 `listening on http://127.0.0.1:34567 (provider: deepseek, ...)` 即启动成功（端口被占用会自动顺延 34568-34570，具体以启动日志为准）。验证：
 
 ```bash
-curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:34567/health
 # {"ok":true,"provider":"deepseek",...}
 ```
 
@@ -219,17 +219,17 @@ npm run build -w extension
 
 ```bash
 # 捕获一条 JD（自动异步打标签）
-curl -X POST http://127.0.0.1:3000/v1/jd/capture \
+curl -X POST http://127.0.0.1:34567/v1/jd/capture \
   -H "Content-Type: application/json" \
   -d '{"source":"manual","url":"https://example.com/job/1","title":"高级后端工程师","company":"某某科技","salaryText":"20-30K·14薪","requirements":"熟悉 Java、K8s，3-5 年经验，本科以上"}'
 
 # 语义搜索本地 JD 库
-curl -X POST http://127.0.0.1:3000/v1/jd/semantic-search \
+curl -X POST http://127.0.0.1:34567/v1/jd/semantic-search \
   -H "Content-Type: application/json" \
   -d '{"query":"找一个不用加班、深入懂 RAG 但对学历要求不严的后端岗位"}'
 
 # 匹配度打分
-curl -X POST http://127.0.0.1:3000/v1/match \
+curl -X POST http://127.0.0.1:34567/v1/match \
   -H "Content-Type: application/json" \
   -d '{"jd":{"title":"高级后端工程师","company":"某某科技","salaryText":"20-30K","requirements":"熟悉 Java、K8s"}}'
 ```
@@ -270,7 +270,7 @@ npm run intel -w core subscribe   # 订阅社区情报
 | 现象 | 原因与解决 |
 |---|---|
 | 面板提示「无法连接本地 Core 服务」 | Core 没启动：`npm start -w core`；或端口被占用（见下一条） |
-| 启动报 `EADDRINUSE` | 端口被占：`netstat -ano \| findstr :3000` 找到 PID 后 `taskkill /PID <pid> /F`，或改 `TOMI_PORT` |
+| 端口被占用 | **自动处理**：默认端口 34567 被占会自动顺延 34568-34570，无需任何操作；如你显式配置了端口才需要自己排查 |
 | 启动即退出，报缺少 API Key | config.json 的 `apiKey` 没填，或 `TOMI_API_KEY` 没导出；provider 与 key 的对应关系见第 2 步 |
 | 面板标签化失败 | 检查 Core 日志（`logLevel: "debug"` 可看细节）；多为 LLM 输出格式异常，会自动重试 1 次 |
 | 岗位页没有出现浮动按钮 | 只支持岗位详情页（`job_detail/*`）；确认插件已加载且页面已登录；刷新试试 |
@@ -289,7 +289,7 @@ npm run intel -w core subscribe   # 订阅社区情报
    `provider`, `model`, `apiKey` (see provider table above). Env-var
    alternative: `TOMI_PROVIDER` / `TOMI_API_KEY` / `TOMI_MODEL`.
 4. **Resume (optional but recommended)**: `cp docs/resume.template.md ~/.tomi-job-hunt/resume.md`
-5. **Run Core**: `npm start -w core` → `curl http://127.0.0.1:3000/health`
+5. **Run Core**: `npm start -w core` → `curl http://127.0.0.1:34567/health`
 6. **Build & load extension**: `npm run build -w extension` →
    `chrome://extensions` → Developer mode → Load unpacked → `extension/dist/`
 7. **Use**: open a zhipin job detail page → TomiHunt panel auto-imports and

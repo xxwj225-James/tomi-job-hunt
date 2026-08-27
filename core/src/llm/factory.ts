@@ -48,13 +48,13 @@ class UnconfiguredProvider implements ChatProvider {
 
   async chat(): Promise<ChatResult> {
     throw new Error(
-      'LLM 尚未配置。请打开 http://127.0.0.1:3000/setup 完成设置（选择服务商并填入 API Key）。',
+      'LLM 尚未配置。请打开 http://127.0.0.1:34567/setup 完成设置（选择服务商并填入 API Key）。',
     );
   }
 
   async *chatStream(): AsyncGenerator<never> {
     throw new Error(
-      'LLM 尚未配置。请打开 http://127.0.0.1:3000/setup 完成设置（选择服务商并填入 API Key）。',
+      'LLM 尚未配置。请打开 http://127.0.0.1:34567/setup 完成设置（选择服务商并填入 API Key）。',
     );
   }
 }

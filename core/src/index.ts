@@ -3,12 +3,13 @@
  *
  *   config → logger → provider → queue → HTTP + WS (127.0.0.1 only)
  */
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { loadConfig, loadDotEnv, readConfigFile } from './config.js';
+import { PORT_RETRIES, loadConfig, loadDotEnv, readConfigFile } from './config.js';
 import { Logger } from './logger.js';
 import { TaskQueue } from './queue.js';
 import { createChatProvider, createChatProviderSafe } from './llm/factory.js';
@@ -30,10 +31,54 @@ const CURRENT_VERSION = (
   JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
 ).version;
 
+/** True when the port is free to bind on 127.0.0.1. */
+export function probePort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => server.close(() => resolve(true)));
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Resolves the listen port. A user-configured port is used verbatim (busy =
+ * loud failure — they asked for it). Otherwise probe DEFAULT_PORT..+3 and
+ * record the actual port in core-port.json so launchers/watchers can find it.
+ */
+export async function resolvePort(
+  configDir: string,
+  cfgPort: number,
+  log: Logger,
+): Promise<number> {
+  const raw = readConfigFile(configDir);
+  const configured = Boolean(process.env.TOMI_PORT || raw.port);
+  if (configured) return cfgPort;
+  for (let i = 0; i < PORT_RETRIES; i += 1) {
+    const port = cfgPort + i;
+    if (await probePort(port)) {
+      if (i > 0) log.info(`port ${cfgPort} busy — auto-selected ${port}`);
+      try {
+        writeFileSync(
+          join(configDir, 'core-port.json'),
+          JSON.stringify({ port, updatedAt: new Date().toISOString() }),
+          'utf8',
+        );
+      } catch {
+        // port.json is best-effort
+      }
+      return port;
+    }
+  }
+  log.warn(`all candidate ports (${cfgPort}-${cfgPort + PORT_RETRIES - 1}) busy — trying ${cfgPort} anyway`);
+  return cfgPort;
+}
+
 async function main(): Promise<void> {
   loadDotEnv();
   const cfg = loadConfig();
   const log = new Logger(cfg.logLevel, 'core');
+  const port = await resolvePort(cfg.configDir, cfg.port, log);
 
   // Dedicated work dir so the Claude Code CLI subprocess never reads the
   // host user's settings/CLAUDE.md (privacy + isolation).
@@ -99,7 +144,7 @@ async function main(): Promise<void> {
   const server = serve(
     {
       fetch: app.fetch,
-      port: cfg.port,
+      port,
       hostname: '127.0.0.1',
     },
     (info) => {
@@ -107,7 +152,7 @@ async function main(): Promise<void> {
         `listening on http://${info.address}:${info.port} ` +
           `(provider: ${cfg.llm.provider}, model: ${cfg.llm.model ?? 'default'}, concurrency: ${cfg.llm.concurrency})`,
       );
-      maybeOpenSetupBrowser(cfg.configDir, cfg.llm, log);
+      maybeOpenSetupBrowser(cfg.configDir, cfg.llm, log, port);
     },
   );
   ws.injectWebSocket(server);
@@ -128,13 +173,13 @@ async function main(): Promise<void> {
  * terminal or a config file. Skipped when a key exists, claude-code
  * credentials are present, or TOMI_NO_OPEN_BROWSER=1.
  */
-function maybeOpenSetupBrowser(configDir: string, llm: LLMConfig, log: Logger): void {
+function maybeOpenSetupBrowser(configDir: string, llm: LLMConfig, log: Logger, port: number): void {
   if (process.env.TOMI_NO_OPEN_BROWSER === '1') return;
   const raw = readConfigFile(configDir);
   const claudeCodeReady = llm.provider === 'claude-code' && hasClaudeCredentials();
   const hasKey = Boolean(raw.apiKey) || Boolean(llm.apiKey) || claudeCodeReady;
   if (hasKey) return;
-  const url = `http://127.0.0.1:${process.env.TOMI_PORT ?? 3000}/setup`;
+  const url = `http://127.0.0.1:${port}/setup`;
   log.info(`no LLM configured — opening setup wizard: ${url}`);
   try {
     const cmd =

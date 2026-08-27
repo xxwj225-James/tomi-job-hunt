@@ -16,6 +16,13 @@ import * as nodeProcess from 'node:process';
 import { z } from 'zod';
 import type { LLMConfig, ProviderId } from './types.js';
 
+/** Default listen port — a cold port on purpose. 3000 collides with
+ *  dev servers all the time; ordinary users must never see a port number. */
+export const DEFAULT_PORT = 34567;
+/** Ports to try when the base port is taken (user-configured ports are used
+ *  verbatim — never silently shifted). */
+export const PORT_RETRIES = 4;
+
 export const PROVIDER_IDS: readonly ProviderId[] = [
   'claude-code',
   'claude-api',
@@ -151,7 +158,7 @@ export function loadConfig(options?: {
 
   return {
     llm,
-    port: intEnv(env.TOMI_PORT) ?? file.port ?? 3000,
+    port: intEnv(env.TOMI_PORT) ?? file.port ?? DEFAULT_PORT,
     logLevel: (env.TOMI_LOG_LEVEL ?? file.logLevel ?? 'info') as AppConfig['logLevel'],
     configDir: dir,
     intel: {

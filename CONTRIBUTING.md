@@ -25,7 +25,7 @@ git clone https://github.com/<your-fork>/tomi-job-hunt.git
 cd tomi-job-hunt
 npm install
 npm test                  # all workspace tests (core + extension)
-npm run dev -w core       # local Core service on 127.0.0.1:3000 (watch mode)
+npm run dev -w core       # local Core service on 127.0.0.1:34567 (watch mode)
 npm run dev -w extension  # extension vite build --watch (then reload in chrome://extensions)
 ```
 

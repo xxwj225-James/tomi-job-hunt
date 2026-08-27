@@ -29,7 +29,7 @@ flowchart LR
     end
 
     subgraph Local["本机 (数据不出本机)"]
-        Core["Core 服务<br/>localhost:3000"]
+        Core["Core 服务<br/>localhost（端口自动选择）"]
         Store["本地 JD 库<br/>(JSONL · 结构化标签)"]
         Data["你的数据<br/>resume.md / config.json"]
         Core -->|读写| Store

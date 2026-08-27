@@ -13,9 +13,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [TomiHunt] Starting the local Core service (127.0.0.1:3000)...
+echo [TomiHunt] Starting the local Core service (127.0.0.1:34567 (auto))...
 echo [TomiHunt] Keep this window open. Closing it stops the service.
-echo [TomiHunt] Setup page (first run): http://127.0.0.1:3000/setup
+echo [TomiHunt] Setup page (first run): http://127.0.0.1:34567 (auto)/setup
 
 if not exist node_modules (
   echo [TomiHunt] First run - installing dependencies, 1-2 min...

@@ -1,21 +1,92 @@
 /**
- * HTTP/WS client for the local Core service (127.0.0.1:3000).
- * Core binds localhost only — this client is the extension's only gateway.
+ * HTTP/WS client for the local Core service.
+ *
+ * Core binds localhost only, and its port is AUTO-SELECTED (base 34567,
+ * shifting up when busy) so ordinary users never see a port number. The
+ * client discovers the port by probing candidates concurrently and caches
+ * the winner in chrome.storage.local — cold misses cost ~1.2s, warm hits
+ * are instant.
  */
 import type { GreetingRequest, GreetingResult, JdCaptureInput, JdTags, WsEvent } from './types.js';
 
-export const CORE_BASE = 'http://127.0.0.1:3000';
+/** Candidate ports Core may pick (keep in sync with core/src/config.ts). */
+const PORT_CANDIDATES = [34567, 34568, 34569, 34570];
+const CACHE_KEY = 'tomihunt-core-base';
+const CACHE_TTL_MS = 30 * 60 * 1000; // revalidate every 30 min
+
+let memoryCache: { base: string; at: number } | null = null;
+
+function isTomiHuntHealth(data: unknown): boolean {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { ok?: unknown }).ok === true &&
+    typeof (data as { provider?: unknown }).provider === 'string'
+  );
+}
+
+/** Probes all candidate ports concurrently; first TomiHunt response wins. */
+async function probeCandidates(): Promise<string | null> {
+  const probes = PORT_CANDIDATES.map(async (port) => {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 1200);
+      const resp = await fetch(`http://127.0.0.1:${port}/health`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      if (isTomiHuntHealth(await resp.json())) return `http://127.0.0.1:${port}`;
+    } catch {
+      // not this port
+    }
+    return null;
+  });
+  const results = await Promise.all(probes);
+  return results.find((base) => base !== null) ?? null;
+}
+
+/** Resolves the Core base URL, consulting storage + memory cache first. */
+export async function getCoreBase(): Promise<string | null> {
+  if (memoryCache && Date.now() - memoryCache.at < CACHE_TTL_MS) return memoryCache.base;
+  try {
+    const data = await chrome.storage.local.get(CACHE_KEY);
+    const cached = data[CACHE_KEY] as { base: string; at: number } | undefined;
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      memoryCache = cached;
+      return cached.base;
+    }
+  } catch {
+    // storage unavailable — probe directly
+  }
+  const found = await probeCandidates();
+  if (found) {
+    memoryCache = { base: found, at: Date.now() };
+    try {
+      await chrome.storage.local.set({ [CACHE_KEY]: memoryCache });
+    } catch {
+      // best-effort cache
+    }
+  }
+  return found;
+}
+
+export const CORE_BASE = 'http://127.0.0.1:34567'; // default candidate; always prefer getCoreBase()
 
 export class CoreClient {
-  constructor(private readonly base: string = CORE_BASE) {}
+  constructor() {}
+
+  private async base(): Promise<string> {
+    return (await getCoreBase()) ?? CORE_BASE;
+  }
 
   async health(): Promise<{ ok: boolean; provider: string; queue: { active: number; pending: number } }> {
-    const resp = await fetch(`${this.base}/health`);
+    const base = await this.base();
+    const resp = await fetch(`${base}/health`);
     return (await resp.json()) as { ok: boolean; provider: string; queue: { active: number; pending: number } };
   }
 
   async captureJd(jd: JdCaptureInput): Promise<{ jobUid: string; taggingJobId: string }> {
-    const resp = await fetch(`${this.base}/v1/jd/capture`, {
+    const base = await this.base();
+    const resp = await fetch(`${base}/v1/jd/capture`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(jd),
@@ -28,7 +99,8 @@ export class CoreClient {
   }
 
   async greeting(req: GreetingRequest): Promise<GreetingResult> {
-    const resp = await fetch(`${this.base}/v1/greeting`, {
+    const base = await this.base();
+    const resp = await fetch(`${base}/v1/greeting`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -41,8 +113,9 @@ export class CoreClient {
   }
 
   /** Opens a WS connection and routes lifecycle events; returns a closer. */
-  watch(onEvent: (event: WsEvent) => void): () => void {
-    const ws = new WebSocket(this.base.replace(/^http/, 'ws') + '/ws');
+  async watch(onEvent: (event: WsEvent) => void): Promise<() => void> {
+    const base = await this.base();
+    const ws = new WebSocket(base.replace(/^http/, 'ws') + '/ws');
     ws.onmessage = (msg) => {
       try {
         onEvent(JSON.parse(msg.data as string) as WsEvent);

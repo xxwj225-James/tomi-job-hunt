@@ -6,7 +6,7 @@
  * - zhipin injects CSS-hidden interference words into JD/HR text — strip them
  * - the chat box is a contenteditable div (NOT a textarea) on /web/geek/chat
  */
-import { CoreClient, CORE_BASE, formatTags } from '../core-client.js';
+import { CoreClient, CORE_BASE, formatTags, getCoreBase } from '../core-client.js';
 import { backendGreeting, backendInterview, backendMatch, backendTag, detectBackend } from './backend.js';
 import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
 
@@ -523,7 +523,8 @@ export async function addToBoard(ctx: CapturedContext, panelTitle: string): Prom
     return;
   }
   try {
-    const resp = await fetch(`${CORE_BASE}/v1/board`, {
+    const base = (await getCoreBase()) ?? CORE_BASE;
+    const resp = await fetch(`${base}/v1/board`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
