@@ -111,9 +111,26 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
 5. 只输出打招呼语本身，不要任何解释、标题或引号${feedbackPart}`;
   const result = await directChat([{ role: 'user', content: prompt }]);
   return {
-    pitch: result.text.trim().slice(0, 120),
+    pitch: normalizePitch(result.text),
     warning: resume ? undefined : '未配置简历，已按 JD 通用生成（点插件图标 → 设置 → 粘贴简历，话术会更有针对性）',
   };
+}
+
+/** Trim, strip one pair of wrapping quotes, then truncate at a punctuation
+ *  boundary so a pitch never ends mid-sentence. Mirror of core/src/jd/greeting.ts. */
+function normalizePitch(text: string, max: number = 120): string {
+  let t = text.trim();
+  const wrapped = t.match(/^([「『“"''])([\s\S]*?)([」』”"'])$/);
+  if (wrapped) t = wrapped[2].trim();
+  if (t.length <= max) return t;
+
+  const cut = t.slice(0, max);
+  let at = -1;
+  for (const ch of ['。', '！', '？', '!', '?', '…', '，', ',']) {
+    const i = cut.lastIndexOf(ch);
+    if (i > at) at = i;
+  }
+  return at >= 0 ? t.slice(0, at + 1) : cut;
 }
 
 // --- Match scoring (port of core match.ts) ---

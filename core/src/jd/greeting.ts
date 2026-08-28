@@ -9,6 +9,25 @@ import type { Logger } from '../logger.js';
 
 const MAX_PITCH_LENGTH = 120;
 
+/** Trim, strip one pair of wrapping quotes, then truncate at a punctuation
+ *  boundary so a pitch never ends mid-sentence. Models occasionally run a few
+ *  characters long (or wrap the pitch in quotes) — a blind slice(0, 120) then
+ *  cuts inside a word and the greeting reads broken. */
+export function normalizePitch(text: string, max: number = MAX_PITCH_LENGTH): string {
+  let t = text.trim();
+  const wrapped = t.match(/^([「『“"''])([\s\S]*?)([」』”"'])$/);
+  if (wrapped) t = wrapped[2].trim();
+  if (t.length <= max) return t;
+
+  const cut = t.slice(0, max);
+  let at = -1;
+  for (const ch of ['。', '！', '？', '!', '?', '…', '，', ',']) {
+    const i = cut.lastIndexOf(ch);
+    if (i > at) at = i;
+  }
+  return at >= 0 ? t.slice(0, at + 1) : cut;
+}
+
 export interface GreetingJd {
   title: string;
   company: string;
@@ -60,7 +79,7 @@ export async function greetJd(
   };
   const result = await provider.chat(req);
   log.debug(`greeting: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`);
-  const pitch = result.text.trim().slice(0, MAX_PITCH_LENGTH);
+  const pitch = normalizePitch(result.text);
   return {
     pitch,
     warning: resume ? undefined : '未配置简历（~/.tomi-job-hunt/resume.md / resume.docx / resume.pdf），已按 JD 通用生成',
