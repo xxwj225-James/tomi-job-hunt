@@ -116,7 +116,14 @@ npm run build -w extension
 
 ## 💝 支持项目
 
-TomiHunt 永久免费开源（无遥测、无弹窗广告）。如果你愿意支持作者持续开发，可以 **微信 / 支付宝扫码请作者喝杯咖啡 ☕**，也可以通过推广链接购买云服务（作者获得返佣，你的价格不变），或订阅爱发电——见 [docs/support.md](docs/support.md)。
+TomiHunt 永久免费开源（无遥测、无弹窗广告）。觉得有用的话，**扫码请作者喝杯咖啡 ☕**：
+
+<p align="center">
+  <img src="docs/images/wechat-donate.jpg" width="200" alt="微信打赏">
+  <img src="docs/images/alipay-donate.jpg" width="200" alt="支付宝打赏">
+</p>
+
+也可以通过推广链接购买云服务（作者获得返佣，你的价格不变），或订阅爱发电——详见 [docs/support.md](docs/support.md)。
 
 ## ⚠️ 使用注意
 
