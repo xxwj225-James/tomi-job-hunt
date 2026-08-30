@@ -28,7 +28,13 @@ TomiHunt 是免费开源的本地工具（MIT 协议），无遥测、不收集�
 
 ## 打赏
 
-- 爱发电：[https://afdian.com/a/jameswu](https://afdian.com/a/jameswu)
+你的每一份支持都会直接激励作者持续开发 TomiHunt。请作者喝杯咖啡 ☕：
+
+| 微信 | 支付宝 |
+|---|---|
+| ![微信打赏](../docs/images/wechat-donate.jpg) | ![支付宝打赏](../docs/images/alipay-donate.jpg) |
+
+- 爱发电（订阅制支持，可选）：[https://afdian.com/a/jameswu](https://afdian.com/a/jameswu)
 
 ## 其他支持方式
 
