@@ -3,6 +3,9 @@
 > AI 求职雷达：本地语义标签、匹配度评分、高回复率打招呼语、去中心化求职情报网。
 > **所有数据留在本地，隐私由你掌控。**
 
+> ⭐ **觉得这个工具对你有帮助？点个 Star 支持一下**，让更多正在求职的朋友看到它 →
+> [⭐ 给 TomiHunt 一个 Star](https://github.com/xxwj225-James/tomi-job-hunt)
+
 [English](#english) | [使用指南](docs/usage.md) | [法律与合规](#法律与合规) | [License](#license)
 
 ## 痛点
