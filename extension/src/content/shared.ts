@@ -27,8 +27,8 @@ export function contextInvalidatedPanel(title: string): void {
   });
 }
 
-/** Support/donation page (affiliate links) — footer of every panel state. */
-const SUPPORT_URL = 'https://github.com/xxwj225-James/tomi-job-hunt/blob/main/docs/support.md';
+/** Support/donation page (QR codes + affiliate links) — footer of every panel state. */
+const SUPPORT_URL = 'https://github.com/xxwj225-James/tomi-job-hunt#%E6%94%AF%E6%8C%81%E9%A1%B9%E7%9B%AE';
 /** Author's other product — subtle referral next to the support link. */
 const TOMILITE_URL = 'https://github.com/xxwj225-James/tomilite';
 

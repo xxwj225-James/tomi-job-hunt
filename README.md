@@ -116,14 +116,29 @@ npm run build -w extension
 
 ## 💝 支持项目
 
-TomiHunt 永久免费开源（无遥测、无弹窗广告）。觉得有用的话，**扫码请作者喝杯咖啡 ☕**：
+TomiHunt 永久免费开源（MIT 协议）、无遥测、不收集任何数据。觉得有用的话，**扫码请作者喝杯咖啡 ☕**：
 
 <p align="center">
   <img src="docs/images/wechat-donate.jpg" width="200" alt="微信打赏">
   <img src="docs/images/alipay-donate.jpg" width="200" alt="支付宝打赏">
 </p>
 
-也可以通过推广链接购买云服务（作者获得返佣，你的价格不变），或订阅爱发电——详见 [docs/support.md](docs/support.md)。
+也可以订阅爱发电支持：[https://afdian.com/a/jameswu](https://afdian.com/a/jameswu)
+
+### 云服务推广（返佣链接）
+
+> ⚠️ 透明披露：以下链接带有推广返佣——你通过它们购买云服务，作者会获得少量佣金，**你的价格与直接购买完全一致**。
+
+- **阿里云**：[https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6](https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6)（推广码 `x4jbzcb6`，注册/购买时填写）— 使用 **Qwen（通义千问）** 需要阿里云百炼账号；部署情报聚合 Worker 也可用阿里云函数计算
+- **腾讯云**：[https://curl.qcloud.com/9QREcs1T](https://curl.qcloud.com/9QREcs1T) — 云服务器、轻量应用服务器（如需远程部署 Core 服务）
+
+### 其他支持方式
+
+- ⭐ Star 本仓库（对开源项目最大的支持）
+- 🐛 反馈问题、提交 PR（见 [CONTRIBUTING.md](CONTRIBUTING.md)）
+- 📣 把 TomiHunt 推荐给正在找工作的朋友
+
+*无论你是否通过以上方式支持，TomiHunt 的全部功能永远免费。你的数据永远只属于你。*
 
 ## ⚠️ 使用注意
 
