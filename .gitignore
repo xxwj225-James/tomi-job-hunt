@@ -12,6 +12,7 @@ extension/dist.pem
 # Environment & local config (never commit API keys)
 .env
 .env.local
+.dev.vars
 
 # Logs
 *.log

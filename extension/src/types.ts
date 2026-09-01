@@ -68,3 +68,22 @@ export type WsEvent =
   | { type: 'job/done'; jobId: string; result: unknown }
   | { type: 'job/error'; jobId: string; message: string }
   | { type: 'jd/tagged'; jobId: string; jobUid: string; tags: JdTags | null; error?: string };
+
+/**
+ * LLM message shape used by direct/llm.ts `directChat` — was imported but
+ * never declared here (esbuild strips the import so the build passed, but
+ * `tsc --noEmit` failed). Now declared so extension feature code type-checks.
+ */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+/** Minimal job-description shape shared by greeting/match/interview/tailor/mock. */
+export interface JdLike {
+  title: string;
+  company: string;
+  salaryText: string;
+  requirements: string;
+  hrName?: string;
+}

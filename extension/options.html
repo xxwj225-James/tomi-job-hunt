@@ -80,6 +80,15 @@
     </div>
 
     <div class="field">
+      <label>匿名反馈（帮助改进 TomiHunt）</label>
+      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:4px">
+        <input id="feedbackOptIn" type="checkbox" checked style="width:auto;margin-top:3px" />
+        <span>你的 👍/👎 反馈与标签会匿名上传给作者改进产品（默认开启，可随时取消勾选）</span>
+      </div>
+      <div class="mode-note">只上传反馈条目（功能 / 标签 / 备注），<b>绝不含你的简历内容</b>；取消勾选并保存后数据完全留在本机。</div>
+    </div>
+
+    <div class="field">
       <label>你的简历（可选但强烈建议）</label>
       <input id="resume-file" type="file" accept=".pdf,.docx,.doc,.txt,.md" style="margin-bottom:8px" />
       <div class="mode-note" id="resume-file-hint" style="margin-bottom:6px">
@@ -97,7 +106,6 @@
     <div id="storage-hint" class="mode-note" style="margin-bottom:10px"></div>
     <div class="row">
       <button id="save">保存</button>
-      <button id="test" class="secondary">保存并测试连接</button>
     </div>
     <div class="row">
       <button id="export" class="secondary" style="flex:1">导出配置备份</button>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractJson } from './prompts.js';
+import { extractJson, scrubUnsupportedYears } from './prompts.js';
 import { directChat, loadDirectConfig, DirectLlmError } from './llm.js';
 
 // --- extractJson (same algorithm as core) ---
@@ -12,6 +12,38 @@ describe('extractJson', () => {
 
   it('throws when no JSON present', () => {
     expect(() => extractJson('no json here')).toThrow();
+  });
+});
+
+// --- scrubUnsupportedYears (deterministic anti-fabrication net) ---
+
+describe('scrubUnsupportedYears', () => {
+  it('removes a year claim not present in the resume, keeping the skill', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。', '简历：Java开发，3年经验')).toBe(
+      '您好，我有Java开发经验。',
+    );
+  });
+
+  it('keeps a year claim that IS present in the resume', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。', '简历：Java 5年')).toBe(
+      '您好，我有5年Java开发经验。',
+    );
+  });
+
+  it('strips "X年以上" claims too, not just plain "X年"', () => {
+    expect(scrubUnsupportedYears('您好，我有5年以上后端经验。', '简历：后端经验')).toBe(
+      '您好，我有后端经验。',
+    );
+  });
+
+  it('does not touch a year that is part of a larger number (15年 vs 5年)', () => {
+    expect(scrubUnsupportedYears('您好，我有15年后端经验。', '简历：15年后端')).toBe(
+      '您好，我有15年后端经验。',
+    );
+  });
+
+  it('is a no-op without a resume (prompt already forbids claims)', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。')).toBe('您好，我有5年Java开发经验。');
   });
 });
 

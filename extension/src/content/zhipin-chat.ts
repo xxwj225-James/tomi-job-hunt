@@ -18,9 +18,11 @@ function main(): void {
     const stored = await loadPitch();
     if (!stored) return;
 
+    const board = { company: stored.company ?? '', title: stored.jdTitle, url: stored.url ?? '' };
+
     if ((await getSendMode()) === 'auto') {
       // Auto mode: fill + send right away; the panel reports what happened.
-      await fillPitch(stored.pitch, true);
+      await fillPitch(stored.pitch, true, undefined, board);
       return;
     }
 
@@ -31,7 +33,7 @@ function main(): void {
       actions: [
         {
           label: '填入聊天框',
-          onClick: () => void fillPitch(stored.pitch),
+          onClick: () => void fillPitch(stored.pitch, undefined, undefined, board),
           primary: true,
         },
       ],

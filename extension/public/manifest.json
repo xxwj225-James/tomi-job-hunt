@@ -7,12 +7,14 @@
   "host_permissions": [
     "https://www.zhipin.com/*",
     "https://www.liepin.com/*",
+    "https://lpt.liepin.com/*",
     "http://127.0.0.1/*",
     "ws://127.0.0.1/*",
     "https://api.deepseek.com/*",
     "https://api.moonshot.cn/*",
     "https://dashscope.aliyuncs.com/*",
-    "https://api.anthropic.com/*"
+    "https://api.anthropic.com/*",
+    "https://tomatovector.com/*"
   ],
   "content_scripts": [
     {
@@ -33,6 +35,11 @@
     {
       "matches": ["https://www.liepin.com/*"],
       "js": ["content/liepin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://lpt.liepin.com/*"],
+      "js": ["content/hr-liepin.js"],
       "run_at": "document_idle"
     }
   ],

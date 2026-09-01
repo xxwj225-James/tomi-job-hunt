@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const CONTENT_SCRIPTS = ['zhipin', 'zhipin-chat', 'zhipin-list', 'liepin'];
+const CONTENT_SCRIPTS = ['zhipin', 'zhipin-chat', 'zhipin-list', 'liepin', 'hr-zhipin', 'hr-liepin'];
 const watch = process.argv.includes('--watch') ? {} : null;
 
 // 1) Popup + options (regular build; public/manifest.json copied to dist/)
@@ -27,6 +27,7 @@ await build({
       input: {
         popup: resolve(root, 'popup.html'),
         options: resolve(root, 'options.html'),
+        workspace: resolve(root, 'workspace.html'),
       },
       output: { entryFileNames: '[name].js' },
     },

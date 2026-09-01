@@ -202,6 +202,10 @@ export async function waitForJd(
 }
 
 async function main(): Promise<void> {
+  // HR 端页面（猎聘 HR 端候选人简历页）由 hr-liepin 处理，求职者分析不应触发。
+  // TODO(platform): 待真实 HR 端 URL 确定后填入路径片段，当前空列表无行为影响。
+  const HR_PATHS: string[] = [];
+  if (HR_PATHS.some((p) => window.location.href.includes(p))) return;
   // Smart replies work in liepin's in-page chat panel too.
   watchChatForReplies();
   const jd = await waitForJd(document);

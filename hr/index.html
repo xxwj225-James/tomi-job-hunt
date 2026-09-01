@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TomiHunt HR 速筛</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        max-width: 760px; margin: 0 auto; padding: 24px 16px 60px;
+        font-family: system-ui, 'Microsoft YaHei', sans-serif; font-size: 14px; color: #222;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: #888; margin-bottom: 20px; }
+      section { background: #fff; border: 1px solid #eef0f4; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+      section h2 { font-size: 15px; margin: 0 0 10px; }
+      label { display: block; font-weight: 600; margin: 10px 0 4px; }
+      input, textarea, select {
+        width: 100%; padding: 8px 10px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 14px; font-family: inherit;
+      }
+      textarea { resize: vertical; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .row > div { flex: 1; min-width: 160px; }
+      button {
+        padding: 9px 18px; border: 0; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #fff;
+        background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      }
+      button.secondary { background: #f0f2f7; color: #333; }
+      button:disabled { opacity: .5; cursor: default; }
+      #status { margin-top: 10px; padding: 10px; border-radius: 8px; display: none; font-size: 13px; }
+      #status.ok { display: block; background: #f0fdf4; color: #1a7f37; }
+      #status.err { display: block; background: #fef2f2; color: #c0392b; }
+      .tip { margin-top: 12px; padding: 12px; background: #f6f8ff; border-radius: 8px; line-height: 1.7; font-size: 13px; }
+      .tip b { color: #4f7cff; }
+      details.tip { background: #fff8e6; }
+      details.tip summary { cursor: pointer; font-weight: 600; color: #b25e00; }
+      .file-list { margin: 10px 0; }
+      .file-item { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+      .file-item .st { font-size: 12px; color: #999; }
+      .file-item .st.done { color: #1a7f37; }
+      .file-item .st.err { color: #c0392b; }
+      .progress { height: 8px; background: #eef0f4; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+      .progress > div { height: 100%; width: 0; background: linear-gradient(135deg, #4f7cff, #6a5cff); transition: width .3s; }
+      .card { border: 1px solid #e3e9f7; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+      .card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .rank { color: #999; font-weight: 700; }
+      .score { font-size: 20px; font-weight: 800; color: #4f7cff; }
+      .badge { padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; color: #fff; }
+      .badge.yuemian { background: #1a7f37; }
+      .badge.daiding { background: #b25e00; }
+      .badge.wanjue { background: #c0392b; }
+      .chip { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #f0f2f7; color: #666; }
+      .ms { font-size: 11px; color: #bbb; }
+      .reasons { margin: 8px 0 0; font-size: 13px; line-height: 1.8; }
+      .reasons .s { color: #1a7f37; } .reasons .g { color: #b25e00; } .reasons .r { color: #c0392b; }
+      .err { color: #c0392b; font-size: 13px; margin-top: 6px; }
+      .muted { color: #888; font-size: 12px; margin-top: 6px; }
+      .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+      .tags label { font-weight: 400; margin: 0; padding: 5px 10px; border: 1px solid #d0d5dd; border-radius: 14px; cursor: pointer; font-size: 13px; }
+      .tags input { display: none; }
+      .tags input:checked + span { background: #eef2ff; border-color: #4f7cff; color: #4f7cff; }
+      .tags span { padding: 5px 10px; border: 1px solid transparent; border-radius: 14px; display: inline-block; }
+      footer { margin-top: 24px; font-size: 12px; color: #999; line-height: 1.7; }
+      footer b { color: #1a7f37; }
+      .hidden { display: none; }
+      .detail { margin-top: 8px; padding: 8px; background: #fafbfd; border-radius: 8px; font-size: 12px; color: #666; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>🤖 TomiHunt HR 速筛</h1>
+    <div class="sub">粘贴 JD + 批量上传候选人简历 → AI 本地打分排名（约面 / 待定 / 婉拒）· 数据不出本机</div>
+
+    <!-- API Key 设置 -->
+    <section>
+      <h2>① 模型服务（填一次即可）</h2>
+      <div class="row">
+        <div>
+          <label>模型服务商</label>
+          <select id="provider">
+            <option value="deepseek">DeepSeek（国内直连 · 便宜）</option>
+            <option value="qwen">通义千问 Qwen（阿里云百炼）</option>
+            <option value="kimi">Kimi / Moonshot</option>
+            <option value="generic">通用（自填 Base URL + 模型）</option>
+          </select>
+        </div>
+        <div>
+          <label>Base URL</label>
+          <input id="baseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
+        </div>
+        <div>
+          <label>模型</label>
+          <input id="model" type="text" placeholder="留空使用默认最新模型" />
+        </div>
+      </div>
+      <label>API Key</label>
+      <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+      <div class="row" style="margin-top:10px">
+        <button id="save">保存</button>
+      </div>
+      <div id="status"></div>
+      <details class="tip">
+        <summary>还没有 API Key？DeepSeek 申请路径（约 5 分钟）</summary>
+        <ol style="margin:8px 0 0;padding-left:18px;line-height:1.9">
+          <li>打开 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">platform.deepseek.com</a>，用手机号注册登录</li>
+          <li>完成<b>实名认证</b>（必须，免费）</li>
+          <li>充值 <b>¥10-20</b>（支付宝/微信，不退款，筛一批简历成本约几分钱）</li>
+          <li>左侧「API keys」→「创建」→ 复制以 <b>sk-</b> 开头的 Key（<b>只显示一次</b>，注意保存）</li>
+          <li>回到本页粘贴 Key → 点保存（保存时会自动测试连接）</li>
+        </ol>
+      </details>
+    </section>
+
+    <!-- JD 输入 -->
+    <section>
+      <h2>② 目标岗位 JD</h2>
+      <label>粘贴 JD 原文（可从招聘网站复制整段岗位描述）</label>
+      <textarea id="jdText" rows="8" placeholder="粘贴岗位职责、任职要求、薪资区间等全文…"></textarea>
+      <details style="margin-top:10px">
+        <summary class="muted">手动指定岗位字段（自动解析不准时再改）</summary>
+        <div class="row">
+          <div><label>岗位</label><input id="jdTitle" type="text" placeholder="高级后端工程师" /></div>
+          <div><label>公司</label><input id="jdCompany" type="text" placeholder="某某科技" /></div>
+          <div><label>薪资</label><input id="jdSalary" type="text" placeholder="20-30K·14薪" /></div>
+        </div>
+      </details>
+      <div id="jdPreview" class="muted"></div>
+    </section>
+
+    <!-- 简历上传 -->
+    <section>
+      <h2>③ 候选人简历（可多选）</h2>
+      <input id="files" type="file" multiple accept=".pdf,.docx,.txt,.md" />
+      <div class="muted" style="margin-top:6px">支持 PDF / Word(.docx) / .txt / .md，在浏览器本地解析，<b>不会上传</b>。旧版 .doc 请另存为 .docx 或导出 PDF。</div>
+      <div class="file-list" id="fileList"></div>
+      <button id="start" style="margin-top:8px">开始速筛</button>
+      <div class="progress hidden" id="progress"><div id="progressBar"></div></div>
+      <div id="progressText" class="muted"></div>
+    </section>
+
+    <!-- 结果 -->
+    <section id="resultSection" class="hidden">
+      <h2>④ 排名结果（越靠前越匹配）</h2>
+      <div id="results"></div>
+    </section>
+
+    <!-- 需求反馈 -->
+    <section>
+      <h2>📮 使用需求反馈（帮我们改进 HR 版）</h2>
+      <div class="muted">TomiHunt 正在开发 HR 版工具，选一下你的需求（可多选），填写后点保存，再复制/导出发给我们即可。</div>
+      <div class="tags" id="needTags"></div>
+      <label>补充说明（可选）</label>
+      <textarea id="needNote" rows="3" placeholder="例：希望支持导出 Excel；希望筛选时只看 3 年经验以上；希望支持在线简历分析…"></textarea>
+      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:10px">
+        <input id="feedbackOptIn" type="checkbox" checked style="width:auto;margin-top:3px" />
+        <span style="font-size:12px">反馈默认匿名上传给作者（仅标签 + 说明，绝不含你的简历或 API Key）。取消勾选后数据完全留在本机。</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="feedbackSave" class="secondary">保存反馈</button>
+        <button id="feedbackCopy" class="secondary">复制反馈</button>
+        <button id="feedbackExport" class="secondary">导出全部反馈</button>
+      </div>
+    </section>
+
+    <footer>
+      <b>🔒 隐私声明：</b>所有简历与 API Key 只保存在你自己的浏览器里（localStorage），只把「JD + 简历文本 + 提示词」发送给你选择的模型 API。本页面不连任何服务器——「匿名反馈上传」默认开启（只上传需求标签与说明），可随时取消勾选关闭；关闭后完全不连服务器。<br />
+      开源免费 · <a href="https://github.com/xxwj225-James/tomi-job-hunt" target="_blank" rel="noopener">TomiHunt</a>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

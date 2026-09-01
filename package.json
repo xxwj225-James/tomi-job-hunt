@@ -6,7 +6,8 @@
   "license": "MIT",
   "workspaces": [
     "core",
-    "extension"
+    "extension",
+    "hr"
   ],
   "scripts": {
     "dev": "npm run dev -w core",

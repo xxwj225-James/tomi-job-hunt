@@ -1,0 +1,24 @@
+{
+  "name": "@tomi/hr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TomiHunt HR screening web app: paste JD + batch upload resumes, AI ranks candidates locally. No plugin required.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.1",
+    "pdfjs-dist": "^5.4.624"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  }
+}

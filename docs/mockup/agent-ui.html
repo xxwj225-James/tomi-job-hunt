@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TomiHunt Agent UI · JD 工作台 Mockup（设计稿，非真实功能）</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e3e6eb;
+    --text: #1f2430;
+    --muted: #7a8194;
+    --faint: #a8afbd;
+    --accent: #3d6cff;
+    --accent-weak: #e9efff;
+    --ok: #22a06b;
+    --warn: #d97706;
+    --danger: #dc3545;
+    --shadow: 0 1px 3px rgba(20, 30, 60, .08), 0 10px 30px rgba(20, 30, 60, .18);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
+
+  /* ── mockup 页头 ─────────────────────── */
+  .page-head { max-width: 1160px; margin: 0 auto; padding: 22px 24px 6px; }
+  .page-head h1 { font-size: 18px; margin: 0 0 4px; }
+  .page-head .sub { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .switchbar { display: flex; gap: 8px; margin-top: 14px; }
+  .seg {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; font-size: 13px; font-family: inherit; color: var(--muted);
+  }
+  .seg.active { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+  /* ── 画布 ─────────────────────────────── */
+  .canvas { max-width: 1160px; margin: 14px auto 8px; padding: 0 24px; }
+  .scene {
+    position: relative; height: 640px; border-radius: 14px; overflow: hidden;
+    background: linear-gradient(180deg, #dde3ec, #ccd4e0);
+  }
+
+  /* ── 背景：假浏览器（用户正在使用的页面）── */
+  .browser { position: absolute; inset: 0; filter: saturate(.55) brightness(.92); }
+  .browser-bar {
+    height: 46px; background: #2b3242; display: flex; align-items: center; gap: 8px; padding: 0 16px;
+  }
+  .brows-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .brows-dot.r { background: #ff5f57; } .brows-dot.y { background: #febc2e; } .brows-dot.g { background: #28c840; }
+  .brows-addr {
+    flex: 1; max-width: 560px; margin: 0 auto; background: #3a4356; color: #c6cddc;
+    font-size: 12px; border-radius: 7px; padding: 5px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .browser-body { position: absolute; inset: 46px 0 0 0; display: flex; }
+  .fake-list { width: 200px; background: #f4f6fb; border-right: 1px solid #dfe4ee; padding: 12px 10px; }
+  .fake-list .fl-item { padding: 8px 10px; border-radius: 8px; font-size: 12px; color: #4a5568; }
+  .fake-list .fl-item.on { background: #dfe8ff; color: #2c3e9e; font-weight: 600; }
+  .fake-list .fl-item .fl-sub { font-size: 11px; color: #8a93a6; font-weight: 400; margin-top: 2px; }
+  .fake-chat { flex: 1; background: #fff; padding: 16px 18px; }
+  .fake-chat .fc-head { font-size: 13px; font-weight: 600; color: #333; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+  .fake-chat .fc-b { max-width: 62%; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; margin-top: 12px; }
+  .fc-b.them { background: #f0f2f7; }
+  .fc-b.me { background: #dce6ff; margin-left: auto; }
+
+  /* ── 悬浮窗容器 ── */
+  .floatwin { position: absolute; top: 40px; right: 48px; width: 820px; z-index: 5; }
+  .fw { display: none; }
+  .fw.active { display: block; }
+  .win {
+    position: relative;
+    background: var(--surface); border: 1px solid #d3d9e4; border-radius: 14px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+
+  .win-head {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    background: linear-gradient(180deg, #fbfcff, #f0f3f9); border-bottom: 1px solid var(--border);
+    cursor: grab;
+  }
+  .win-head .brand { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .win-head .status { margin-left: 6px; font-size: 11px; color: var(--ok); font-weight: 600; }
+  .win-head .spacer { flex: 1; }
+  .win-btn {
+    width: 22px; height: 22px; border: none; background: transparent; border-radius: 6px;
+    color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer; font-family: inherit;
+  }
+  .win-btn:hover { background: #e4e8f0; color: var(--text); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px;
+    border-radius: 6px; background: #eef0f4; color: var(--muted);
+  }
+  .chip.t { background: var(--accent-weak); color: var(--accent); }
+  .chip.r { background: #fdecef; color: var(--danger); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { background: #f0f2f6; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #3159e0; }
+  .btn.sm { padding: 4px 9px; font-size: 11.5px; }
+  .muted { color: var(--muted); }
+  .section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin: 0 0 6px; }
+
+  /* ── 工作台布局 ── */
+  .work { display: flex; height: 486px; }
+
+  /* JD 列表（左侧） */
+  .side { width: 216px; border-right: 1px solid var(--border); background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; }
+  .side-head { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .side-head .row { display: flex; align-items: center; justify-content: space-between; }
+  .side-head .row .t { font-size: 12.5px; font-weight: 700; }
+  .side-head .row .n { font-size: 11px; color: var(--faint); }
+  .side-search {
+    width: 100%; margin-top: 7px; border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 9px; font-size: 12px; font-family: inherit; background: var(--surface);
+  }
+  .side-list { flex: 1; overflow: auto; padding: 6px; }
+  .jd-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .jd-item:hover { background: #eef1f7; }
+  .jd-item.active { background: var(--accent-weak); border-color: var(--accent); }
+  .jd-item .row1 { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .jd-item .jname { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jd-item .jscore { font-size: 11px; font-weight: 700; color: var(--ok); flex-shrink: 0; }
+  .jd-item .jsub { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jd-item .jstate { font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .side-foot { padding: 9px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+  .side-foot a { color: var(--accent); text-decoration: none; cursor: pointer; }
+
+  /* 工作区（右侧） */
+  .work-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .tabbar { display: flex; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: #f7f9fd; align-items: center; }
+  .tabbar .tab {
+    border: none; background: transparent; padding: 6px 12px; border-radius: 8px;
+    font-size: 12.5px; color: var(--muted); cursor: pointer; font-family: inherit;
+  }
+  .tabbar .tab.active { background: var(--surface); box-shadow: 0 1px 3px rgba(20,30,60,.08); color: var(--accent); font-weight: 600; }
+  .tabbar .spacer { flex: 1; }
+  .tabbar .tab-hint { font-size: 11px; color: var(--faint); }
+  .panel { display: none; padding: 12px; overflow: auto; flex: 1; }
+  .panel.active { display: block; }
+
+  /* ── 聊天 tab ── */
+  .chat-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 0 10px; border-bottom: 1px solid var(--border); }
+  .chat-head .who { font-size: 13.5px; font-weight: 600; }
+  .chat-head .meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .chat-head .st { font-size: 11.5px; color: var(--ok); }
+  .bubbles { margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { max-width: 74%; padding: 8px 12px; border-radius: 11px; font-size: 12.5px; line-height: 1.6; }
+  .bubble.them { align-self: flex-start; background: #f0f2f7; border-radius: 11px 11px 11px 3px; }
+  .bubble.me { align-self: flex-end; background: var(--accent); color: #fff; border-radius: 11px 11px 3px 11px; }
+  .pitch-box { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 4px; }
+  .pitch-box .pb-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: #f7f9fd; border-bottom: 1px solid var(--border); }
+  .pitch-box .pb-head .l { display: flex; align-items: center; gap: 6px; }
+  .pitch-box textarea {
+    width: 100%; border: none; outline: none; resize: none; padding: 8px 10px;
+    font-size: 12.5px; line-height: 1.65; font-family: inherit; background: var(--surface); color: var(--text); height: 60px;
+  }
+  .pitch-box .pb-foot { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--border); }
+  .pitch-box .count { font-size: 11px; color: var(--muted); }
+  .pitch-box .count.warn { color: var(--warn); }
+  .send-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .send-row .target { font-size: 11.5px; color: var(--muted); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .send-row .target b { color: var(--text); }
+  .send-note { font-size: 11px; color: var(--faint); margin-top: 6px; }
+
+  /* ── 简历匹配 tab ── */
+  .match-head { display: flex; align-items: center; gap: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #fafbff; }
+  .ring {
+    width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: conic-gradient(var(--ok) 0 82%, #e7eaf1 0);
+  }
+  .ring b { font-size: 18px; color: var(--ok); }
+  .match-head .mh-title { font-size: 15px; font-weight: 700; }
+  .match-head .mh-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .match-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .match-cols { display: flex; gap: 14px; margin-top: 14px; }
+  .match-col { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .match-col h5 { font-size: 12px; margin: 0 0 6px; }
+  .match-col.good h5 { color: var(--ok); } .match-col.gap h5 { color: var(--warn); } .match-col.risk h5 { color: var(--danger); }
+  .match-col ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.8; }
+  .match-ops { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* ── 模拟面试 tab ── */
+  .iv-head { display: flex; justify-content: space-between; align-items: center; padding: 2px 0 10px; border-bottom: 1px solid var(--border); }
+  .iv-head .t { font-size: 13.5px; font-weight: 600; }
+  .iv-head .progress { font-size: 11.5px; color: var(--muted); }
+  .qa-q { border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+  .qa-q .lab { font-size: 11px; color: var(--accent); font-weight: 700; margin-bottom: 5px; }
+  .qa-q .txt { font-size: 13px; line-height: 1.7; }
+  .qa-answer { margin-top: 12px; }
+  .qa-answer textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    font-size: 12.5px; line-height: 1.7; font-family: inherit; resize: vertical; height: 96px; background: var(--surface);
+  }
+  .qa-answer .ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .qa-feedback { border: 1px solid #d8f0e5; background: #f3fbf7; border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+  .qa-feedback .lab { font-size: 11px; color: var(--ok); font-weight: 700; margin-bottom: 5px; }
+  .qa-feedback .txt { font-size: 12.5px; line-height: 1.7; }
+  .iv-foot { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* ── 反馈 tab ── */
+  .fb-hist { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .fb-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; }
+  .fb-row .thumbs { font-size: 13px; }
+  .fb-row .tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .fb-row .note { font-size: 11.5px; color: var(--muted); flex: 1; }
+  .fb-row .tm { font-size: 10.5px; color: var(--faint); }
+  .fb-form { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .fb-form .fb-line { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .fb-form input[type=text] { flex: 1; min-width: 160px; border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 12.5px; font-family: inherit; }
+  .fb-form select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; }
+
+  /* ── 广告条 ── */
+  .adstrip {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    height: 30px; background: #fbfcff; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted);
+  }
+  .adstrip a { color: var(--accent); text-decoration: none; }
+
+  /* ── 设置浮层 ── */
+  .overlay {
+    position: absolute; inset: 0; background: rgba(255,255,255,.98); z-index: 9;
+    display: none; padding: 16px; overflow: auto;
+  }
+  .overlay.open { display: block; }
+  .overlay .ov-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .ov-sets { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
+  .set-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .set-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .set-row + .set-row { border-top: 1px solid #f0f2f6; }
+  .set-row .lab { width: 130px; flex-shrink: 0; font-weight: 600; font-size: 12.5px; }
+  .set-row .desc { font-size: 11.5px; color: var(--muted); }
+  .set-row .ctl { flex: 1; display: flex; justify-content: flex-end; }
+  input[type=password], input[type=text], select {
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px;
+    font-family: inherit; background: var(--surface); width: 210px;
+  }
+  .switch { width: 36px; height: 20px; border-radius: 11px; background: #c9ced9; position: relative; cursor: pointer; transition: background .15s; }
+  .switch.on { background: var(--accent); }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .switch.on::after { left: 18px; }
+  .key-guide {
+    margin-top: 6px; padding: 10px 12px; background: #f7f9fd; border: 1px solid var(--border);
+    border-radius: 10px; font-size: 12px; line-height: 1.7; color: var(--text);
+  }
+  .key-guide b { font-size: 12px; }
+  .key-guide ol { margin: 6px 0 0; padding-left: 18px; }
+  .key-guide code { background: #eef0f4; padding: 0 5px; border-radius: 4px; font-size: 11px; }
+  .key-guide .tip { color: var(--muted); margin-top: 6px; }
+
+  /* ── 折叠胶囊 ── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px;
+    background: var(--surface); border: 1px solid #d3d9e4; border-radius: 22px; box-shadow: var(--shadow);
+    cursor: pointer; font-size: 12.5px; font-weight: 600;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .pill .chev { color: var(--faint); }
+
+  /* ── 图例 ─────────────────────────────── */
+  .legend { max-width: 1160px; margin: 4px auto 40px; padding: 0 24px; }
+  .legend table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .legend th, .legend td { text-align: left; padding: 9px 14px; font-size: 12.5px; border-bottom: 1px solid #f0f2f6; vertical-align: top; }
+  .legend th { background: #f7f9fd; font-weight: 600; color: var(--muted); font-size: 12px; }
+  .legend tr:last-child td { border-bottom: none; }
+  .legend code { background: #eef0f4; padding: 1px 6px; border-radius: 5px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>TomiHunt Agent UI · JD 工作台（以 JD 为单位 · 左侧 JD · 右侧功能并列）</h1>
+  <div class="sub">设计稿，非真实功能。OS 级悬浮窗（无边框 · 置顶）。<b>以 JD 为单位</b>：左侧 JD 库列表（浏览时自动收集），选中一个 JD → 右侧是该 JD 的并行功能 tab（聊天 / 简历匹配 / 模拟面试 / 反馈）。</div>
+  <div class="switchbar">
+    <button class="seg active" data-s="work">工作台（JD 为单位）</button>
+    <button class="seg" data-s="pill">折叠胶囊（离开时）</button>
+  </div>
+</div>
+
+<div class="canvas">
+  <div class="scene">
+
+    <!-- 背景：假浏览器（用户正在使用的页面） -->
+    <div class="browser">
+      <div class="browser-bar">
+        <span class="brows-dot r"></span><span class="brows-dot y"></span><span class="brows-dot g"></span>
+        <div class="brows-addr">zhipin.com/web/geek/chat?id=zhangnvshi</div>
+      </div>
+      <div class="browser-body">
+        <div class="fake-list">
+          <div class="fl-item on">张女士 · 某某科技<div class="fl-sub">高级后端工程师</div></div>
+          <div class="fl-item">李工 · 某某云<div class="fl-sub">Go 服务端开发</div></div>
+          <div class="fl-item">王先生 · 猎头<div class="fl-sub">驻场 · 远程</div></div>
+        </div>
+        <div class="fake-chat">
+          <div class="fc-head">张女士 · 某某科技 — 聊天窗口（正常页面，无插件 UI）</div>
+          <div class="fc-b me">您好，看到贵司在招高级后端工程师，我 5 年 Java 后端经验，主导过订单系统重构…</div>
+          <div class="fc-b them">你好，简历看过了，背景挺匹配的。最近有在考虑新机会吗？</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 悬浮窗 -->
+    <div class="floatwin">
+
+      <!-- 折叠胶囊 -->
+      <div class="fw fw-pill" data-fw="pill">
+        <div class="pill">🤖 <span class="dot"></span> TomiHunt · 高级后端工程师 <span class="chev">▾</span></div>
+      </div>
+
+      <!-- JD 工作台 -->
+      <div class="fw fw-work" data-fw="work">
+        <div class="win">
+
+          <div class="win-head">
+            <div class="brand">🤖 TomiHunt</div>
+            <div class="status">● 网关在线 · DeepSeek 已连接</div>
+            <div class="spacer"></div>
+            <button class="win-btn" id="gearBtn" title="设置">⚙️</button>
+            <button class="win-btn" title="折叠">–</button>
+            <button class="win-btn" title="关闭">✕</button>
+          </div>
+
+          <div class="work">
+            <!-- 左侧：JD 库 -->
+            <div class="side">
+              <div class="side-head">
+                <div class="row"><span class="t">JD 库</span><span class="n">23 个</span></div>
+                <input class="side-search" placeholder="搜索公司 / 岗位 / 技术栈…" />
+              </div>
+              <div class="side-list">
+                <div class="jd-item active">
+                  <div class="row1"><span class="jname">高级后端工程师</span><span class="jscore">⚡82</span></div>
+                  <div class="jsub">某某科技 · 深圳 · 20-30K</div>
+                  <div class="jstate">已沟通 · 09-01 14:32</div>
+                </div>
+                <div class="jd-item">
+                  <div class="row1"><span class="jname">Go 服务端开发</span><span class="jscore">⚡67</span></div>
+                  <div class="jsub">某某云 · 杭州 · 25-40K</div>
+                  <div class="jstate">未沟通 · 09-01 11:05</div>
+                </div>
+                <div class="jd-item">
+                  <div class="row1"><span class="jname">AI 应用开发</span><span class="jscore" style="color:var(--warn)">⚡51</span></div>
+                  <div class="jsub">某某智能 · 远程 · 30-50K</div>
+                  <div class="jstate">未沟通 · 08-31 20:41</div>
+                </div>
+                <div class="jd-item">
+                  <div class="row1"><span class="jname">数据平台开发</span><span class="jscore" style="color:var(--faint)">⚡38</span></div>
+                  <div class="jsub">某某数科 · 北京 · 28-45K</div>
+                  <div class="jstate">未沟通 · 08-30 09:12</div>
+                </div>
+              </div>
+              <div class="side-foot">
+                <span>简历：resume.md</span><a id="resumeLink">更新</a>
+              </div>
+            </div>
+
+            <!-- 右侧：选中 JD 的工作台 -->
+            <div class="work-main">
+              <div class="tabbar">
+                <button class="tab active" data-tab="chat">💬 聊天</button>
+                <button class="tab" data-tab="match">📄 简历匹配</button>
+                <button class="tab" data-tab="iv">🎤 模拟面试</button>
+                <button class="tab" data-tab="fb">💬 反馈</button>
+                <span class="spacer"></span>
+                <span class="tab-hint">跟随活跃 Tab：当前选中的 JD 自动高亮</span>
+              </div>
+
+              <!-- 聊天 -->
+              <div class="panel active" data-panel="chat">
+                <div class="chat-head">
+                  <div>
+                    <div class="who">张女士 · 某某科技 <span class="chip t" style="margin-left:4px">高级后端工程师</span></div>
+                    <div class="meta">Boss直聘 · 09-01</div>
+                  </div>
+                  <span class="st">● 聊天窗口在线</span>
+                </div>
+                <div class="bubbles">
+                  <div class="bubble me">您好，看到贵司在招高级后端工程师，我 5 年 Java 后端经验，主导过订单系统重构，生产环境用过 K8s。方便看下我的简历吗？</div>
+                  <div class="bubble them">你好，简历看过了，背景挺匹配的。最近有在考虑新机会吗？</div>
+                  <div class="bubble me">有的，最近在重点看微服务方向的岗位，贵司这个团队规模和技术栈都挺感兴趣。</div>
+                  <div class="bubble them">好的，那明天下午 2 点方便电话面试吗？大概半小时。</div>
+                </div>
+                <div class="pitch-box">
+                  <div class="pb-head">
+                    <span class="section-title" style="margin:0">回复话术</span>
+                    <span style="display:flex;gap:4px">
+                      <button class="btn sm" title="有用 · 匿名反馈👍">👍</button>
+                      <button class="btn sm" title="一般 · 匿名反馈👎">👎</button>
+                      <button class="btn sm">🔄 重新生成</button>
+                    </span>
+                  </div>
+                  <textarea>方便，明天下午 2 点可以，电话或视频都可以。方便先介绍一下团队目前的技术栈和分工吗？我提前准备一下。</textarea>
+                  <div class="pb-foot"><span class="count">48 字</span><span class="chip t">80-120 字</span></div>
+                </div>
+                <div class="send-row">
+                  <div class="target">发送到 <b>张女士 · HR</b>（Boss直聘 · Tab 在线）</div>
+                  <button class="btn primary">📤 发送</button>
+                </div>
+                <div class="send-note">发送后无头插件在下方页面静默填入并点击，当面可见；失败原因/现场回显于此。</div>
+              </div>
+
+              <!-- 简历匹配 -->
+              <div class="panel" data-panel="match">
+                <div class="match-head">
+                  <div class="ring"><b>82</b></div>
+                  <div>
+                    <div class="mh-title">高级后端工程师 · 某某科技</div>
+                    <div class="mh-sub">深圳 · 20-30K·14薪 · 3-5年 · 本科 · 与「resume.md」匹配</div>
+                    <div class="match-tags">
+                      <span class="chip t">Java</span><span class="chip t">Redis</span><span class="chip t">K8s</span>
+                      <span class="chip">双休</span><span class="chip r">外包转正</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="match-cols">
+                  <div class="match-col good"><h5>✓ 优势</h5><ul><li>5 年 Java，主导订单系统</li><li>K8s 生产环境经验</li><li>本科统招</li></ul></div>
+                  <div class="match-col gap"><h5>△ 差距</h5><ul><li>简历未体现 Redis 深度</li><li>无金融/交易领域经验</li></ul></div>
+                  <div class="match-col risk"><h5>! 避坑</h5><ul><li>外包转正岗位，注意合同主体</li><li>标注双休，面试需确认加班</li></ul></div>
+                </div>
+                <div class="match-ops">
+                  <button class="btn sm primary">生成话术并发送</button>
+                  <button class="btn sm">开始模拟面试</button>
+                  <button class="btn sm">打开该会话</button>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:10px">匹配数据来自 JD 库（浏览时自动收集）+ 简历本地解析，不上传。</div>
+              </div>
+
+              <!-- 模拟面试 -->
+              <div class="panel" data-panel="iv">
+                <div class="iv-head">
+                  <div class="t">🎤 模拟面试 · 高级后端工程师</div>
+                  <span class="progress">第 3 / 12 题 · 平均 78 分</span>
+                </div>
+                <div class="qa-q">
+                  <div class="lab">面试官</div>
+                  <div class="txt">你提到主导过订单系统的重构，能具体讲讲当时拆分了哪些服务、用什么策略保证线上稳定吗？</div>
+                </div>
+                <div class="qa-answer">
+                  <textarea placeholder="输入你的回答…（可语音转写）">当时把订单主流程按「交易-支付-履约」拆了三个服务，用消息队列削峰…</textarea>
+                  <div class="ops">
+                    <button class="btn sm">跳过</button>
+                    <button class="btn sm primary">提交回答</button>
+                  </div>
+                </div>
+                <div class="qa-feedback">
+                  <div class="lab">🤖 AI 点评</div>
+                  <div class="txt">回答结构清晰（拆分思路 + 稳定性手段），但缺少<b>量化结果</b>——建议补充「重构后 QPS 从 800 提升到 2500、失败率下降 60%」这类数据；另外面试官大概率追问「如何保证消息不丢」，可提前准备「本地消息表 + 对账任务」的回答。</div>
+                </div>
+                <div class="iv-foot">
+                  <button class="btn sm primary">下一题</button>
+                  <button class="btn sm">结束面试</button>
+                  <button class="btn sm">历史记录</button>
+                </div>
+              </div>
+
+              <!-- 反馈 -->
+              <div class="panel" data-panel="fb">
+                <div class="section-title">本 JD 的反馈</div>
+                <div class="fb-form">
+                  <div style="font-size:12.5px">这个岗位的生成结果帮到你了吗？（匿名，仅发送评分与标签，帮助改进）</div>
+                  <div class="fb-line">
+                    <button class="btn sm primary">👍 有用</button>
+                    <button class="btn sm">👎 一般</button>
+                    <select><option>标签…</option><option>太官方</option><option>不够具体</option><option>太长了</option><option>夸大经历</option></select>
+                  </div>
+                  <div class="fb-line"><input type="text" placeholder="补充说明（可选，≤200字）" /><button class="btn sm">提交</button></div>
+                </div>
+                <div class="fb-hist">
+                  <div class="fb-row">
+                    <span class="thumbs">👍</span>
+                    <div class="tags"><span class="chip">背景匹配</span><span class="chip">语气自然</span></div>
+                    <span class="note">打招呼语 82 分那次挺准的</span>
+                    <span class="tm">09-01</span>
+                  </div>
+                  <div class="fb-row">
+                    <span class="thumbs">👎</span>
+                    <div class="tags"><span class="chip">太官方</span></div>
+                    <span class="note">模拟面试第 1 题点评太笼统</span>
+                    <span class="tm">08-31</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="adstrip">💝 支持项目（<a href="#">推广返佣 / 打赏</a>） · <a href="#">TomiLite</a> · <a href="#">社区</a></div>
+
+          <!-- 设置浮层 -->
+          <div class="overlay" id="settingsOverlay">
+            <div class="ov-head">
+              <div style="font-weight:700;font-size:14px">设置</div>
+              <button class="btn sm" id="closeSettings">✕ 关闭</button>
+            </div>
+            <div class="ov-sets">
+              <div class="set-card">
+                <div class="section-title">LLM · 只适配 DeepSeek</div>
+                <div class="set-row"><div class="lab">API Key</div><div class="ctl"><input type="password" placeholder="粘贴你的 DeepSeek API Key" /></div></div>
+                <div class="set-row"><div class="lab">模型</div><div class="ctl"><select><option>deepseek-v4-flash（默认）</option></select></div></div>
+                <div class="set-row"><div class="lab">连接</div><div class="desc">保存时自动测试</div><div class="ctl"><button class="btn sm">保存</button></div></div>
+                <div class="key-guide">
+                  <b>如何获取 API Key（第一次使用？）</b>
+                  <ol>
+                    <li>浏览器打开 <b>platform.deepseek.com</b>，注册 / 登录账号；</li>
+                    <li>进入「API Keys」→「创建 API Key」→ 复制以 <code>sk-</code> 开头的密钥；</li>
+                    <li>粘贴到上方「API Key」输入框 → 点「保存」，自动测试连接。</li>
+                  </ol>
+                  <div class="tip">⚠ 普通用户不需要关心模型参数：默认 <code>deepseek-v4-flash</code> 即可，快且便宜。</div>
+                  <div class="tip">🔒 API Key 仅保存在本机（加密存储），不会上传。</div>
+                </div>
+              </div>
+              <div class="set-card">
+                <div class="section-title">应用</div>
+                <div class="set-row"><div class="lab">开机自启动</div><div class="ctl"><div class="switch on"></div></div></div>
+                <div class="set-row"><div class="lab">关闭窗口时</div><div class="desc">最小化到托盘</div><div class="ctl"><div class="switch on"></div></div></div>
+                <div class="set-row"><div class="lab">悬浮窗置顶</div><div class="desc">浮在浏览器上方</div><div class="ctl"><div class="switch on"></div></div></div>
+              </div>
+              <div class="set-card">
+                <div class="section-title">浏览器插件（无头模式）</div>
+                <div class="set-row"><div class="lab">状态</div><div class="desc">已加载 · 固定目录 %LOCALAPPDATA%\TomiHunt\extension</div></div>
+                <div class="set-row"><div class="lab">加载 / 刷新</div><div class="ctl"><button class="btn sm">打开扩展页</button></div></div>
+                <div class="set-row"><div class="lab">移除插件</div><div class="ctl"><button class="btn sm" style="color:var(--danger)">移除本插件</button></div></div>
+              </div>
+              <div class="set-card">
+                <div class="section-title">关于</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">TomiHunt v0.3.0 · 本地优先求职助手 · 数据全部留在本机<br/>服务 http://127.0.0.1:34567 · 端口占用自动顺延</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <table>
+    <tr><th>设计点</th><th>说明</th></tr>
+    <tr>
+      <td>以 JD 为单位</td>
+      <td><b>左侧 JD 库</b>（浏览时自动收集，非浏览器镜像）+ <b>右侧工作台</b>：选中一个 JD，其全部能力集中在一个工作区，而不是散落在全局"聊天 / 功能 / 设置"里。</td>
+    </tr>
+    <tr>
+      <td>功能并列</td>
+      <td>右侧 tab 为同一 JD 的并行功能：💬 聊天（气泡 + 话术 + 发送 + 👍👎）· 📄 简历匹配（分环 + ✓优势 / △差距 / !避坑）· 🎤 模拟面试（逐题问答 + AI 点评 + 历史）· 💬 反馈（本 JD 的匿名反馈）。</td>
+    </tr>
+    <tr>
+      <td>悬浮窗形态</td>
+      <td>仍为 OS 级无边框置顶窗（<code>frame:false</code> + <code>alwaysOnTop</code> + <code>skipTaskbar</code>），窗头可拖动；离开聊天页自动折叠成胶囊（右下角「折叠胶囊」预览）。</td>
+    </tr>
+    <tr>
+      <td>跟随活跃 Tab</td>
+      <td>浏览器当前打开的 JD 聊天 → 左侧该项自动高亮 + 右侧自动切到该 JD；用户也可在左侧自由切换任意 JD。</td>
+    </tr>
+    <tr>
+      <td>设置入口</td>
+      <td>窗头 ⚙️ 打开设置浮层（DeepSeek / 简历 / 自启 / 插件管理），不占工作台 tab。</td>
+    </tr>
+    <tr>
+      <td>广告位</td>
+      <td>窗口底部细条（💝 支持项目 / 推广返佣 / TomiLite / <b>社区入口</b>，链接占位）。</td>
+    </tr>
+  </table>
+</div>
+
+<script>
+  const segs = document.querySelectorAll('.switchbar .seg');
+  const fws = document.querySelectorAll('.fw');
+  function show(s) {
+    segs.forEach((b) => b.classList.toggle('active', b.dataset.s === s));
+    fws.forEach((f) => f.classList.toggle('active', f.dataset.fw === s));
+  }
+  segs.forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+
+  // tab 切换
+  document.querySelectorAll('.tabbar .tab').forEach((t) => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tabbar .tab').forEach((x) => x.classList.toggle('active', x === t));
+      document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === t.dataset.tab));
+    });
+  });
+
+  // JD 选中
+  document.querySelectorAll('.jd-item').forEach((it) => {
+    it.addEventListener('click', () => document.querySelectorAll('.jd-item').forEach((x) => x.classList.toggle('active', x === it)));
+  });
+
+  // 设置浮层
+  document.getElementById('gearBtn').addEventListener('click', () => document.getElementById('settingsOverlay').classList.add('open'));
+  document.getElementById('closeSettings').addEventListener('click', () => document.getElementById('settingsOverlay').classList.remove('open'));
+
+  show('work');
+</script>
+</body>
+</html>

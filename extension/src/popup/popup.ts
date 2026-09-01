@@ -59,6 +59,10 @@ document.getElementById('open-options')?.addEventListener('click', () => {
   void chrome.runtime.openOptionsPage();
 });
 
+document.getElementById('open-workspace')?.addEventListener('click', () => {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('workspace.html') });
+});
+
 // --- One-click Core launcher (tomihunt:// protocol registered by install-core.bat) ---
 document.getElementById('start-core')?.addEventListener('click', () => {
   void startCore();

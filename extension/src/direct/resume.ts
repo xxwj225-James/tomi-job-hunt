@@ -11,7 +11,3 @@ export async function loadResume(): Promise<string | undefined> {
   const resume = data[RESUME_KEY] as string | undefined;
   return resume?.trim() || undefined;
 }
-
-export async function saveResume(resume: string): Promise<void> {
-  await chrome.storage.local.set({ [RESUME_KEY]: resume });
-}

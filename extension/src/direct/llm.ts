@@ -97,13 +97,15 @@ export async function loadDirectConfig(): Promise<DirectLlmConfig | null> {
   return cfg?.apiKey ? cfg : null;
 }
 
-export async function directChat(messages: ChatMessage[]): Promise<DirectChatResult> {
-  const cfg = await loadDirectConfig();
-  if (!cfg) {
-    throw new DirectLlmError(
-      '尚未配置 API Key。请点击插件图标 → 设置，选择模型服务商并粘贴 API Key。',
-    );
-  }
+/**
+ * Chat with an explicit config — used where a caller owns its own key (e.g.
+ * HR resume analysis under `tomihunt-hr-llm-config`) instead of the job
+ * seeker's `tomihunt-llm-config`.
+ */
+export async function directChatWith(
+  cfg: DirectLlmConfig,
+  messages: ChatMessage[],
+): Promise<DirectChatResult> {
   const baseUrl = (cfg.baseUrl?.trim() || (PRESETS[cfg.provider]?.baseUrl ?? '')).replace(/\/+$/, '');
   if (!baseUrl) {
     throw new DirectLlmError('「通用」服务商需要填写 Base URL（OpenAI 兼容地址，如 https://xxx/v1）。');
@@ -112,6 +114,16 @@ export async function directChat(messages: ChatMessage[]): Promise<DirectChatRes
     throw new DirectLlmError('请填写模型名称（model）。');
   }
   return openAiCompatibleChat(baseUrl, cfg.apiKey, cfg.model, messages, cfg.thinking === true);
+}
+
+export async function directChat(messages: ChatMessage[]): Promise<DirectChatResult> {
+  const cfg = await loadDirectConfig();
+  if (!cfg) {
+    throw new DirectLlmError(
+      '尚未配置 API Key。请点击插件图标 → 设置，选择模型服务商并粘贴 API Key。',
+    );
+  }
+  return directChatWith(cfg, messages);
 }
 
 /** Connection test for the options page. */

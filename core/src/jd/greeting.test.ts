@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGreetingPrompt, normalizePitch } from './greeting.js';
+import { buildGreetingPrompt, normalizePitch, scrubUnsupportedYears } from './greeting.js';
 
 const jd = {
   title: '高级后端工程师',
@@ -66,5 +66,23 @@ describe('normalizePitch', () => {
   it('hard-cuts when there is no punctuation at all', () => {
     const noPunct = '非常期待有机会和您详细交流我的工作经验和项目实践'.repeat(5);
     expect(normalizePitch(noPunct)).toBe(noPunct.slice(0, 120));
+  });
+});
+
+describe('scrubUnsupportedYears', () => {
+  it('removes a year claim not present in the resume, keeping the skill', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。', '简历：Java开发，3年经验')).toBe(
+      '您好，我有Java开发经验。',
+    );
+  });
+
+  it('keeps a year claim that IS present in the resume', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。', '简历：Java 5年')).toBe(
+      '您好，我有5年Java开发经验。',
+    );
+  });
+
+  it('is a no-op without a resume (prompt already forbids claims)', () => {
+    expect(scrubUnsupportedYears('您好，我有5年Java开发经验。')).toBe('您好，我有5年Java开发经验。');
   });
 });

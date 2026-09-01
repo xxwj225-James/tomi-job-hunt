@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TomiHunt 工作台</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        max-width: 860px; margin: 0 auto; padding: 20px 16px 60px;
+        font-family: system-ui, 'Microsoft YaHei', sans-serif; font-size: 14px; color: #222;
+      }
+      h1 { font-size: 18px; margin: 0 0 14px; }
+      .tabs { display: flex; gap: 6px; border-bottom: 1px solid #eef0f4; margin-bottom: 16px; }
+      .tabs button {
+        border: 0; background: none; padding: 9px 16px; cursor: pointer; font-size: 14px; font-weight: 600; color: #666;
+        border-bottom: 2px solid transparent;
+      }
+      .tabs button.active { color: #4f7cff; border-bottom-color: #4f7cff; }
+      .tab { display: none; }
+      .tab.active { display: block; }
+      input, textarea, select {
+        width: 100%; padding: 8px 10px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 14px; font-family: inherit;
+      }
+      textarea { resize: vertical; }
+      button {
+        padding: 8px 16px; border: 0; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #fff;
+        background: linear-gradient(135deg, #4f7cff, #6a5cff);
+      }
+      button.secondary { background: #f0f2f7; color: #333; }
+      button:disabled { opacity: .5; cursor: default; }
+      .muted { color: #888; font-size: 12px; }
+      .hidden { display: none !important; }
+      .add-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+      .add-form .full { grid-column: 1 / -1; }
+      .columns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+      .col { background: #fafbfd; border: 1px solid #eef0f4; border-radius: 10px; padding: 8px; min-height: 120px; }
+      .col h3 { margin: 0 0 8px; font-size: 12px; color: #666; text-align: center; }
+      .card { background: #fff; border: 1px solid #e3e9f7; border-radius: 8px; padding: 8px; margin-bottom: 6px; font-size: 13px; }
+      .card .t { font-weight: 600; }
+      .card .c { color: #666; }
+      .card a { color: #4f7cff; text-decoration: none; font-size: 12px; }
+      .card .note { color: #b25e00; font-size: 12px; margin-top: 4px; }
+      .card .foot { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+      .card select { padding: 3px; font-size: 12px; }
+      .card button { padding: 3px 8px; font-size: 12px; background: #f0f2f7; color: #c0392b; }
+      .group { margin-bottom: 16px; }
+      .group > h3 { margin: 0 0 6px; font-size: 14px; color: #4f7cff; }
+      .v-item { border: 1px solid #e3e9f7; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+      .v-item .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .v-item .badge { background: #1a7f37; color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+      .v-item pre { background: #fafbfd; border-radius: 8px; padding: 8px; font-size: 12px; max-height: 200px; overflow: auto; white-space: pre-wrap; }
+      .v-item .ops { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+      .v-item .ops button { padding: 4px 10px; font-size: 12px; }
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+      .compare pre { background: #fafbfd; border-radius: 8px; padding: 8px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow: auto; }
+      .m-setup { margin-bottom: 12px; }
+      .m-setup textarea { margin: 6px 0; }
+      .m-setup .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .transcript { border: 1px solid #eef0f4; border-radius: 10px; padding: 10px; max-height: 320px; overflow-y: auto; margin-bottom: 10px; }
+      .bubble { margin-bottom: 8px; max-width: 80%; }
+      .bubble.ai { margin-right: auto; background: #f0f2f7; border-radius: 10px 10px 10px 2px; padding: 8px 10px; }
+      .bubble.user { margin-left: auto; background: #eef2ff; border-radius: 10px 10px 2px 10px; padding: 8px 10px; }
+      .bubble .fb { color: #b25e00; font-size: 12px; margin-top: 4px; }
+      .wrapup { background: #f0fdf4; border: 1px solid #cde9d6; border-radius: 10px; padding: 12px; margin-top: 10px; }
+      .status { margin-top: 10px; padding: 8px 10px; border-radius: 8px; display: none; font-size: 13px; }
+      .status.ok { display: block; background: #f0fdf4; color: #1a7f37; }
+      .status.err { display: block; background: #fef2f2; color: #c0392b; }
+    </style>
+  </head>
+  <body>
+    <h1>🧰 TomiHunt 工作台</h1>
+    <div class="tabs">
+      <button data-tab="board" class="active">📋 看板（投递追踪）</button>
+      <button data-tab="versions">📄 简历版本</button>
+      <button data-tab="mock">🎤 模拟面试</button>
+    </div>
+
+    <!-- 看板 -->
+    <section id="tab-board" class="tab active">
+      <div class="add-form">
+        <input id="b-company" placeholder="公司" />
+        <input id="b-title" placeholder="岗位" />
+        <input id="b-url" placeholder="链接（可选）" />
+        <input id="b-note" placeholder="备注（可选）" />
+        <select id="b-status">
+          <option value="greeted">已打招呼</option>
+          <option value="applied">已投简历</option>
+          <option value="interview">面试中</option>
+          <option value="offer">已Offer</option>
+          <option value="rejected">已拒绝</option>
+        </select>
+        <button id="b-add">添加</button>
+      </div>
+      <div class="columns" id="board-columns"></div>
+      <div class="muted">在 Boss直聘/猎聘发打招呼语时，会自动把该岗位记入看板（自动发送时）。也可手动添加。</div>
+    </section>
+
+    <!-- 简历版本 -->
+    <section id="tab-versions" class="tab">
+      <div class="m-setup">
+        <select id="v-jd-select">
+          <option value="">— 从看板选一个岗位（可选）—</option>
+        </select>
+        <textarea id="v-jd-text" rows="4" placeholder="或粘贴目标 JD 原文（岗位要求越全，定制效果越好）"></textarea>
+        <div class="muted" id="v-resume-hint"></div>
+        <button id="v-create" style="margin-top:8px">生成本岗位定制简历</button>
+      </div>
+      <div id="v-compare" class="hidden">
+        <h3 style="margin:10px 0 4px">A/B 对比</h3>
+        <div class="row" style="display:flex;gap:8px">
+          <select id="v-a" style="flex:1"></select>
+          <select id="v-b" style="flex:1"></select>
+        </div>
+        <div class="compare">
+          <pre id="v-a-pre">（选择版本 A）</pre>
+          <pre id="v-b-pre">（选择版本 B）</pre>
+        </div>
+      </div>
+      <div id="v-list" style="margin-top:12px"></div>
+    </section>
+
+    <!-- 模拟面试 -->
+    <section id="tab-mock" class="tab">
+      <div class="m-setup">
+        <select id="m-jd-select">
+          <option value="">— 从看板选一个岗位（可选）—</option>
+        </select>
+        <textarea id="m-jd-text" rows="4" placeholder="粘贴完整 JD（岗位要求 + 任职要求），越详细面试越有针对性"></textarea>
+        <div class="row">
+          <input id="m-title" placeholder="岗位（自动解析，可改）" />
+          <input id="m-company" placeholder="公司（自动解析，可改）" />
+        </div>
+        <button id="m-start" style="margin-top:8px">开始模拟面试</button>
+      </div>
+      <div class="transcript" id="m-transcript"></div>
+      <textarea id="m-answer" rows="3" placeholder="输入你的回答…"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="m-send">发送回答</button>
+        <button id="m-end" class="secondary">结束面试</button>
+        <button id="m-restart" class="secondary hidden">重新开始</button>
+      </div>
+      <div id="m-wrapup" class="wrapup hidden"></div>
+      <div id="m-status" class="status"></div>
+    </section>
+
+    <script type="module" src="/src/workspace/workspace.ts"></script>
+  </body>
+</html>

@@ -10,6 +10,7 @@ import { CORE_BASE as CORE_BASE_FALLBACK, getCoreBase, CoreClient } from '../cor
 import { directGreeting, directInterviewPrep, directMatch, directReply, directTagJd } from '../direct/prompts.js';
 import { loadResume } from '../direct/resume.js';
 import type { GreetingResult, JdTags, ReplyRequest, ReplyResult } from '../types.js';
+export type { JdLike } from '../types.js';
 
 export type Backend = 'core' | 'direct';
 
@@ -34,14 +35,6 @@ export async function detectBackend(): Promise<Backend> {
 }
 
 const client = new CoreClient();
-
-export interface JdLike {
-  title: string;
-  company: string;
-  salaryText: string;
-  requirements: string;
-  hrName?: string;
-}
 
 async function corePost<T>(path: string, body: unknown): Promise<T> {
   const base = (await getCoreBase()) ?? CORE_BASE_FALLBACK;

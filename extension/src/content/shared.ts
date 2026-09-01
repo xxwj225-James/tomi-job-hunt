@@ -9,6 +9,15 @@
 import { CoreClient, CORE_BASE, formatTags, getCoreBase } from '../core-client.js';
 import { backendGreeting, backendInterview, backendMatch, backendReply, backendTag, detectBackend } from './backend.js';
 import type { JdCaptureInput, JdTags, GreetingResult } from '../types.js';
+import { addBoardEntry, loadBoard } from '../direct/board.js';
+import {
+  addFeedback,
+  aggregatePersonalRules,
+  FEEDBACK_TAGS,
+  loadFeedback,
+  personalRulesPrompt,
+} from '../direct/feedback.js';
+import { loadResume } from '../direct/resume.js';
 
 export const client = new CoreClient();
 
@@ -127,6 +136,7 @@ export function fillChatBox(text: string, selectors: string[]): boolean {
       el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
     }
     el.focus();
+    rememberOutgoing(text);
     return true;
   }
   return false;
@@ -144,14 +154,70 @@ const MSG_SELECTORS = [
   '[class*="msg-content"]',
 ];
 
-/** Heuristic side classification: right/self-marked = mine, else theirs. */
+/**
+ * Side classification via real layout markers, not just class names:
+ *  - explicit self/right/left/other classes (zhipin)
+ *  - computed text-align / float
+ *  - flex auto-margins: `margin-left:auto` pushes MY bubble to the right,
+ *    `margin-right:auto` pushes the OTHER side's bubble to the left
+ *  - `align-self:flex-end` (column chat lists right-align my bubble)
+ * Falls back to 'not mine' so ambiguous messages reach the echo guard below.
+ * (Inline-style fallback keeps jsdom tests green — getComputedStyle there
+ * returns '' for styles that real browsers compute.)
+ */
 function isMyMessage(el: Element): boolean {
   const cls = typeof el.className === 'string' ? el.className : '';
   if (/(^|[ _-])(self|right|mine|me)([ _-]|$)/i.test(cls)) return true;
   if (/(^|[ _-])(left|from|other)([ _-]|$)/i.test(cls)) return false;
-  const style = (el as HTMLElement).style;
-  if (style.cssFloat === 'right' || style.textAlign === 'right') return true;
+  const computed = getComputedStyle(el);
+  const inline = (el as HTMLElement).style;
+  const textAlign = computed.textAlign || inline.textAlign;
+  const cssFloat = computed.cssFloat || inline.cssFloat;
+  if (cssFloat === 'right' || textAlign === 'right') return true;
+  const ml = computed.marginLeft || inline.marginLeft;
+  const mr = computed.marginRight || inline.marginRight;
+  if (ml === 'auto' && mr !== 'auto') return true;
+  if (mr === 'auto' && ml !== 'auto') return false;
+  const alignSelf = computed.alignSelf || inline.alignSelf;
+  if (alignSelf === 'flex-end' || alignSelf === 'end') return true;
+  if (alignSelf === 'flex-start' || alignSelf === 'start') return false;
   return false;
+}
+
+// Texts the extension itself filled into / sent from the chat box. Echoes of
+// these in the DOM are OUR messages (they get classified as theirs only when
+// the site's markup carries no side marker, e.g. liepin) — never incoming HR
+// messages, so they must not trigger a reply.
+const OUTGOING_WINDOW_MS = 90_000;
+const recentOutgoing: Array<{ text: string; ts: number }> = [];
+
+function rememberOutgoing(text: string): void {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length < 2) return;
+  recentOutgoing.push({ text: t, ts: Date.now() });
+  // Liepin renders a multi-line message as per-line bubbles (and a single-line
+  // input may only send the first line), so the echo can be ONE line of what
+  // we sent. Remember each non-trivial line too — the echo then matches
+  // exactly instead of being misread as an incoming HR message.
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/\s+/g, ' ').trim();
+    if (line.length >= 2) recentOutgoing.push({ text: line, ts: Date.now() });
+  }
+  while (recentOutgoing.length > 40) recentOutgoing.shift();
+}
+
+function isRecentOutgoing(text: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  const now = Date.now();
+  return recentOutgoing.some((r) => {
+    if (now - r.ts >= OUTGOING_WINDOW_MS) return false;
+    if (r.text === t) return true;
+    // Echo may be a truncated/fragmented copy of our sent message (liepin
+    // splits long messages). A ≥4-char fragment that lives inside our sent
+    // text is ours, never incoming HR content.
+    if (t.length >= 4 && r.text.includes(t)) return true;
+    return false;
+  });
 }
 
 /**
@@ -165,6 +231,7 @@ export function observeChatMessages(onIncoming: (text: string) => void): () => v
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (text.length < 2) return;
     if (seen.has(text)) return;
+    if (isRecentOutgoing(text)) return; // an echo of what we just sent/filled
     if (isMyMessage(el)) return; // my own messages never trigger replies
     seen.add(text);
     onIncoming(text);
@@ -242,7 +309,7 @@ export async function handleIncomingMessage(text: string): Promise<void> {
 
   replyHistory.push({ speaker: 'hr', content: text });
   const jd = await loadLastJd();
-  const resume = await loadResumeFromExtension();
+  const resume = await loadResume();
   try {
     const { reply } = await backendReply({
       jd: jd ?? { title: '未知岗位', company: '未知公司', salaryText: '', requirements: '' },
@@ -258,6 +325,11 @@ export async function handleIncomingMessage(text: string): Promise<void> {
         ? ['已根据对方消息拟好回复并填入聊天框', '确认内容后自行点击发送。']
         : ['已拟好回复，但未找到聊天输入框（请先打开聊天窗口）：'],
       pitch: reply,
+      actions: [
+        ...(lastTagged
+          ? [{ label: '返回', onClick: () => showTaggedPanel(lastTagged!.ctx, lastTagged!.panelTitle) }]
+          : [{ label: '打开工作台', onClick: () => void chrome.tabs.create({ url: chrome.runtime.getURL('workspace.html') }) }]),
+      ],
     });
   } catch {
     // generation failure — stay silent, the user can reply manually
@@ -278,6 +350,9 @@ export function watchChatForReplies(): void {
 export interface StoredPitch {
   pitch: string;
   jdTitle: string;
+  /** Board context for auto-logging a greeted entry when the pitch is sent. */
+  company?: string;
+  url?: string;
   ts: number;
 }
 
@@ -286,15 +361,6 @@ export async function savePitch(pitch: StoredPitch): Promise<void> {
     await chrome.storage.session.set({ 'tomihunt-pitch': pitch });
   } catch {
     // storage unavailable — pitch stays on the current page only
-  }
-}
-
-async function loadResumeFromExtension(): Promise<string | undefined> {
-  try {
-    const data = await chrome.storage.local.get('tomihunt-resume');
-    return (data['tomihunt-resume'] as string | undefined)?.trim() || undefined;
-  } catch {
-    return undefined;
   }
 }
 
@@ -335,6 +401,15 @@ const PANEL_CSS = `
 @keyframes spin { to { transform: rotate(360deg); } }
 .support { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0f0f0; font-size: 11px; color: #999; }
 .support a { color: #4f7cff; text-decoration: none; }
+.fb-bar { margin-top: 10px; padding: 8px; background: #f8f9fb; border-radius: 8px; font-size: 12px; }
+.fb-bar .fb-prompt { color: #666; margin-bottom: 6px; }
+.fb-bar .fb-ops { display: flex; gap: 6px; }
+.fb-bar button { padding: 4px 10px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; cursor: pointer; font-size: 12px; color: #444; }
+.fb-bar button.on { background: #4f7cff; border-color: #4f7cff; color: #fff; }
+.fb-bar .fb-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.fb-bar .fb-note { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 6px; border: 1px solid #d0d5dd; border-radius: 6px; font: inherit; font-size: 12px; }
+.fb-bar .fb-done { color: #1a7f37; font-size: 12px; }
+.hidden { display: none !important; }
 `;
 
 function ensurePanel(): ShadowRoot {
@@ -386,6 +461,8 @@ export function showPanel(content: {
   /** Optional feedback textarea (e.g. regeneration opinions). */
   input?: { placeholder?: string; value?: string };
   onInput?: (value: string) => void;
+  /** Renders a 👍/👎 feedback bar; submissions persist to `tomihunt-feedback`. */
+  feedback?: { feature: string };
 }): void {
   const rows = content.rows.map((r) => `<div class="row">${escapeHtml(r)}</div>`).join('');
   const tagsHtml = content.tags
@@ -404,11 +481,12 @@ export function showPanel(content: {
           `<button class="btn ${a.primary === false ? 'secondary' : ''}" data-action="${a.label}">${escapeHtml(a.label)}</button>`,
       )
       .join('') ?? '';
+  const fbHtml = content.feedback ? feedbackBarHtml(content.feedback) : '';
   // Support footer appears on EVERY panel state (tags / match / pitch /
   // interview) — visible placement, never injected into AI-generated text.
   const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（推广返佣/打赏） · <a href="${TOMILITE_URL}" target="_blank" rel="noopener">TomiLite</a>（作者的 AI 助手）</div>`;
   setPanelHtml(
-    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}${inputHtml}<div style="margin-top:8px">${actionsHtml}</div>${supportHtml}`,
+    `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}${inputHtml}<div style="margin-top:8px">${actionsHtml}</div>${fbHtml}${supportHtml}`,
   );
   const s = ensurePanel();
   if (content.input && content.onInput) {
@@ -419,7 +497,84 @@ export function showPanel(content: {
     const el = s.querySelector(`[data-action="${a.label}"]`);
     if (el) el.addEventListener('click', a.onClick);
   }
+  if (content.feedback) {
+    const bar = s.querySelector('.fb-bar');
+    if (bar) wireFeedbackBar(bar as HTMLElement, content.feedback);
+  }
   wireToggle();
+}
+
+/** Feedback bar markup — thumbs, complaint chips (down), optional note. */
+function feedbackBarHtml(opts: { feature: string }): string {
+  return `
+    <div class="fb-bar" data-feature="${escapeHtml(opts.feature)}">
+      <div class="fb-prompt">这个结果怎么样？你的偏好会影响后续生成 👇</div>
+      <div class="fb-ops">
+        <button data-fb="up">👍 不错</button>
+        <button data-fb="down">👎 待改进</button>
+      </div>
+      <div class="fb-edit hidden">
+        <div class="fb-tags hidden"></div>
+        <textarea class="fb-note hidden" rows="2" placeholder="补充说明（可选）"></textarea>
+        <button class="fb-save">保存反馈</button>
+      </div>
+      <div class="fb-done hidden">✅ 已记录你的偏好，后续生成会参考。</div>
+    </div>`;
+}
+
+/** Wires thumbs → chips → note → save → `addFeedback` into chrome.storage. */
+function wireFeedbackBar(el: HTMLElement, opts: { feature: string }): void {
+  const ops = el.querySelector('.fb-ops') as HTMLElement;
+  const edit = el.querySelector('.fb-edit') as HTMLElement;
+  const tags = el.querySelector('.fb-tags') as HTMLElement;
+  const note = el.querySelector('.fb-note') as HTMLTextAreaElement;
+  const save = el.querySelector('.fb-save') as HTMLButtonElement;
+  const done = el.querySelector('.fb-done') as HTMLElement;
+  let thumbs: 'up' | 'down' | null = null;
+  const selected: string[] = [];
+
+  const renderTags = (): void => {
+    tags.classList.remove('hidden');
+    tags.innerHTML = Object.entries(FEEDBACK_TAGS)
+      .map(
+        ([id, label]) =>
+          `<button data-tag="${id}" class="${selected.includes(id) ? 'on' : ''}">${escapeHtml(label)}</button>`,
+      )
+      .join('');
+    for (const btn of tags.querySelectorAll<HTMLButtonElement>('button[data-tag]')) {
+      btn.addEventListener('click', () => {
+        const tag = btn.dataset.tag ?? '';
+        const i = selected.indexOf(tag);
+        if (i >= 0) selected.splice(i, 1);
+        else selected.push(tag);
+        btn.classList.toggle('on');
+      });
+    }
+  };
+
+  for (const btn of ops.querySelectorAll<HTMLButtonElement>('button[data-fb]')) {
+    btn.addEventListener('click', () => {
+      thumbs = (btn.dataset.fb as 'up' | 'down') ?? null;
+      ops.classList.add('hidden');
+      edit.classList.remove('hidden');
+      note.classList.remove('hidden');
+      save.classList.remove('hidden');
+      if (thumbs === 'down') renderTags();
+      else tags.classList.add('hidden');
+    });
+  }
+
+  save.addEventListener('click', async () => {
+    if (!thumbs) return;
+    await addFeedback({
+      feature: opts.feature,
+      thumbs,
+      tags: selected,
+      note: note.value.trim() || undefined,
+    });
+    edit.classList.add('hidden');
+    done.classList.remove('hidden');
+  });
 }
 
 /** Returns the toggle button so pages can show/hide the whole widget. */
@@ -439,6 +594,7 @@ export interface CapturedContext {
 
 /** Renders the tagged panel — shared by core and direct backends. */
 export function showTaggedPanel(ctx: CapturedContext, panelTitle: string): void {
+  lastTagged = { ctx, panelTitle };
   showPanel({
     title: panelTitle,
     rows: [],
@@ -447,13 +603,44 @@ export function showTaggedPanel(ctx: CapturedContext, panelTitle: string): void 
       { label: '生成打招呼语', onClick: () => void generatePitch(ctx, panelTitle), primary: true },
       { label: '匹配度打分', onClick: () => void showMatch(ctx, panelTitle) },
       { label: '准备面试', onClick: () => void showInterviewPrep(ctx, panelTitle) },
+      { label: '记录到看板', onClick: () => void addToBoard(ctx, panelTitle) },
       { label: '重新导入', onClick: () => void captureAndShow(ctx, panelTitle, true) },
     ],
   });
 }
 
+/** Manual "记录到看板" — logs the current JD as a greeted board entry. */
+async function addToBoard(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  const jd = ctx.jd;
+  try {
+    const entry = await addBoardEntry({
+      status: 'greeted',
+      company: jd.company || '未知公司',
+      title: jd.title || '未知岗位',
+      url: location.href,
+      source: 'manual',
+    });
+    showPanel({
+      title: panelTitle,
+      rows: [`✅ 已记入看板「已打招呼」：${entry.title} @ ${entry.company}`, '在插件「🧰 工作台 → 看板」里可跟踪投递进度。'],
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
+    });
+  } catch (err) {
+    showPanel({
+      state: 'error',
+      title: panelTitle,
+      rows: [],
+      error: `记录失败: ${(err as Error).message}`,
+      actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
+    });
+  }
+}
+
 /** Identity of the JD the last completed analysis belongs to. */
 let lastCapturedKey: string | null = null;
+
+/** Last shown tagged panel — smart-reply / sub-panels return here. */
+let lastTagged: { ctx: CapturedContext; panelTitle: string } | null = null;
 
 function jdKey(jd: JdCaptureInput): string {
   return `${jd.title}|${jd.company}`;
@@ -556,6 +743,11 @@ export async function captureAndShow(
   }
 }
 
+/** Board context for the current JD — used to auto-log a greeted entry. */
+function boardContext(ctx: CapturedContext): { company: string; title: string; url: string } {
+  return { company: ctx.jd.company, title: ctx.jd.title, url: location.href };
+}
+
 export async function generatePitch(
   ctx: CapturedContext,
   panelTitle: string,
@@ -563,6 +755,11 @@ export async function generatePitch(
 ): Promise<void> {
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在生成打招呼语…'] });
   try {
+    // Prompt adaptation: merge the user's accumulated thumbs/tags/notes
+    // ("personal rules") into the existing feedback param — works for both
+    // direct and Core backends, no fine-tuning involved.
+    const rulePrompt = personalRulesPrompt(aggregatePersonalRules(await loadFeedback()));
+    const effectiveFeedback = [rulePrompt, feedback?.trim()].filter(Boolean).join('\n') || undefined;
     const result: GreetingResult = await backendGreeting(
       {
         title: ctx.jd.title,
@@ -571,18 +768,19 @@ export async function generatePitch(
         requirements: ctx.jd.requirements,
         hrName: ctx.jd.hrName,
       },
-      feedback,
+      effectiveFeedback,
     );
     // Handoff: 立即沟通 navigates to /web/geek/chat/* — the chat page script
     // reads the pitch back from chrome.storage.session.
-    await savePitch({ pitch: result.pitch, jdTitle: ctx.jd.title, ts: Date.now() });
+    await savePitch({ pitch: result.pitch, jdTitle: ctx.jd.title, company: ctx.jd.company, url: location.href, ts: Date.now() });
     const rows = result.warning ? [result.warning] : [];
     showPanel({
       title: panelTitle,
       rows,
       pitch: result.pitch,
+      feedback: { feature: 'greeting' },
       actions: [
-        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows)), primary: true },
+        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows), boardContext(ctx)), primary: true },
         { label: '重新生成（可填意见）', onClick: () => showRegeneratePanel(ctx, panelTitle) },
         { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
       ],
@@ -609,8 +807,9 @@ export async function generatePitch(
       title: panelTitle,
       rows,
       pitch: result.pitch,
+      feedback: { feature: 'greeting' },
       actions: [
-        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows)), primary: true },
+        { label: '填入聊天框', onClick: () => void fillPitch(result.pitch, false, () => showPitchPanel(result, rows), boardContext(ctx)), primary: true },
         { label: '重新生成（可填意见）', onClick: () => showRegeneratePanel(ctx, panelTitle) },
         { label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) },
       ],
@@ -711,13 +910,26 @@ function clickSendButton(): boolean {
   return false;
 }
 
+/** Reads whatever text currently sits in the focused chat input. */
+function readChatInputText(): string {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return '';
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return el.value;
+  if (el.isContentEditable) return el.textContent ?? '';
+  return '';
+}
+
 /**
  * Sends the message currently sitting in the chat input. Enter-key path
  * first (what the sites' own React handlers listen for), send-button click
- * as fallback.
+ * as fallback. The outgoing text is remembered so its echo in the DOM never
+ * triggers a smart reply.
  */
 export function sendChatMessage(): boolean {
-  return pressEnterOnInput() || clickSendButton();
+  const text = readChatInputText();
+  const sent = pressEnterOnInput() || clickSendButton();
+  if (sent && text) rememberOutgoing(text);
+  return sent;
 }
 
 // 立即沟通/继续沟通 button candidates — clicking one opens the chat window
@@ -731,16 +943,33 @@ const OPEN_CHAT_SELECTORS = [
   '.btn-start-chat',
 ];
 
+/** Auto-logs a greeted board entry once per company|title (dedupe by key). */
+async function logSentToBoard(board: { company: string; title: string; url?: string }): Promise<void> {
+  if (!board.company && !board.title) return;
+  const all = await loadBoard();
+  const key = (c: string, t: string): string => `${c}|${t}`;
+  if (all.some((e) => key(e.company, e.title) === key(board.company, board.title))) return;
+  await addBoardEntry({
+    status: 'greeted',
+    company: board.company || '未知公司',
+    title: board.title || '未知岗位',
+    url: board.url ?? '',
+    source: 'pitch-sent',
+  });
+}
+
 /**
  * Shared fill routine. When autoSend is undefined the stored send mode
  * decides (default: manual — fill only, user clicks send themselves).
  * If no chat input exists yet, tries to OPEN the chat window itself by
  * clicking the site's 立即沟通 button, then retries filling.
+ * `board` enables auto-logging a greeted entry when the pitch is actually sent.
  */
 export async function fillPitch(
   pitch: string,
   autoSend?: boolean,
   back?: () => void,
+  board?: { company: string; title: string; url?: string },
 ): Promise<void> {
   const shouldAuto = autoSend ?? ((await getSendMode()) === 'auto');
   const filled = fillChatBox(pitch, CHAT_INPUT_SELECTORS);
@@ -762,6 +991,7 @@ export async function fillPitch(
           if (shouldAuto) {
             await new Promise((r) => setTimeout(r, 600));
             const sent = sendChatMessage();
+            if (sent && board) await logSentToBoard(board);
             showPanel({
               title: 'TomiHunt',
               rows: sent ? ['✅ 已自动发送。'] : ['已填入 — 请手动按 Enter 发送（内容已保留）。'],
@@ -816,6 +1046,7 @@ export async function fillPitch(
     // Give the site's React state a beat to settle, then send.
     await new Promise((r) => setTimeout(r, 800));
     const sent = sendChatMessage();
+    if (sent && board) await logSentToBoard(board);
     showPanel({
       title: 'TomiHunt',
       rows: sent
@@ -890,6 +1121,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
     showPanel({
       title: `${panelTitle} — 匹配度`,
       rows,
+      feedback: { feature: 'match' },
       actions: [
         // High fit ⇒ straight to the pitch, no navigation detour.
         ...(result.score >= 85

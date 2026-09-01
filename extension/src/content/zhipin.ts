@@ -204,6 +204,10 @@ export function hasDetailMarker(doc: Document): boolean {
 }
 
 async function main(): Promise<void> {
+  // HR 端页面（Boss直聘 HR 端候选人简历页）由 hr-zhipin 处理，求职者分析不应触发。
+  // TODO(platform): 待真实 HR 端 URL 确定后填入路径片段（如 '/web/boss/'），当前空列表无行为影响。
+  const HR_PATHS: string[] = [];
+  if (HR_PATHS.some((p) => window.location.href.includes(p))) return;
   const isDetailUrl = /job_detail\//.test(window.location.href);
 
   if (isDetailUrl) {
