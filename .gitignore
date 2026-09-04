@@ -34,6 +34,8 @@ docs/installer-design.md
 docs/headless-agent-architecture.md
 docs/intel-network.md
 docs/mockup/
-# docs/images 里的图不随仓库发布，唯独 README 界面预览截图（公开 UI）例外。
+# docs/images 里的图不随仓库发布，唯独 README 界面预览截图 + 捐赠收款码（公开）例外。
 docs/images/*
 !docs/images/agent-ui.png
+!docs/images/wechat-donate.jpg
+!docs/images/alipay-donate.jpg

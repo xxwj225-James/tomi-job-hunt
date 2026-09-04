@@ -16,21 +16,23 @@
 
 ## 痛点
 
-招聘平台本质是「卖曝光位的商业地产商」：搜索只能匹配公司名/岗位名、优质 JD 藏在付费曝光之后、求职者被困在盲目刷列表的消耗战里。
+刷 Boss直聘 / 猎聘 时，求职者被困在一连串重复、碎片的手工活里：
 
-- 平台不让搜深层需求（「不用加班、懂 RAG、学历要求不严」搜不出来）
-- 信息不对称：薪资虚标、外包伪装、挂职不招无法识别
-- 海投简历没有针对性，HR 回复率低
-- 不放心把个人简历交给云端求职工具
+- 刷过的岗位转头就忘，好机会和废 JD 混在一起——没有沉淀，过几天没法回头再筛
+- 一个岗位值不值得投、和自己匹不匹配，全靠肉眼对照，慢且主观
+- 打招呼语千篇一律、不针对岗位，发出去回复率低
+- 每投一个岗位简历都要手工改一遍，重复劳动、容易漏
+- 面试前临时翻 JD 抱佛脚，没有针对这家公司的准备材料
+- 而把简历和浏览记录交给云端求职 SaaS，隐私没有保障
 
 ## 解决方案
 
-TomiHunt 全部跑在你的电脑上，用 AI + 社区打破信息壁垒：
+TomiHunt 全部跑在你的电脑上，用 AI 把你从重复手工活里解放出来：
 
 - **桌面 Agent**（Windows）：一键安装、内置一切——悬浮对话窗 + Core 服务 + 浏览器插件 + 自动更新，只差你一个 API Key
 - **浏览器插件**（Chrome / Edge）：自动提炼 Boss 直聘 / 猎聘岗位详情，AI 结构化标签（技术栈/工时/风险词），打招呼语一键填入聊天框
-- **本地 Core 服务**：本地 JD 库 + LLM 标签化 + 话术生成（DeepSeek / Qwen / Kimi / 任意 OpenAI 兼容端点，自由切换）
-- **去中心化情报网**（规划中）：匿名共享结构化求职情报（真实薪资、外包黑榜），零注册、零服务器
+- **本地 Core 服务**：本地 JD 库 + LLM 标签化 + 匹配打分 + 定制简历 + 面试准备（DeepSeek / Qwen / Kimi / 任意 OpenAI 兼容端点，自由切换）
+- **去中心化情报网**（规划中）：匿名共享结构化求职情报（如真实薪资、外包黑榜），零注册、零服务器——见下方功能地图的 🧱 状态
 
 ```mermaid
 flowchart LR
@@ -52,18 +54,35 @@ flowchart LR
     Core -->|"API (仅 JD 与提示词)"| LLM
 ```
 
-## ✨ 功能路线图
+## ✨ 功能地图（按真实完成度标注）
 
-- [x] **阶段 0** — 项目基础 + 本地 Core 服务 + LLM 多 Provider 接入
-- [x] **数据地基** — 统一 JD/情报 Schema + 本地 JD 库 + LLM 结构化标签 + PII 脱敏管线 + 合规文档
-- [x] **阶段 1** — 插件闭环：Boss 直聘 JD 提取 + 打招呼语 + 聊天框一键填入；猎聘提取
-- [x] **阶段 2** — 本地语义搜索（意图翻译 + 标签粗筛 + LLM 重排）+ 匹配度打分（0-100 诊断）+ 定制简历改写（MD/Word 导出）
-- [x] **阶段 3** — 列表页降噪过滤（风险词规则）+ 卡片 AI 打分 + 面试提问准备（STAR 建议）
-- [x] **阶段 4** — 隐形流量池雷达（HN/V2EX/GitHub → 每日日报）+ 求职看板（本地 Markdown Kanban）+ 多模型切换
-- [x] **阶段 5** — 去中心化情报网（仓库 Feed 导出 + 结构化 Issue 模板 + Nostr 发布/订阅 + 可选 Cloudflare Worker 中转）
-- [x] **阶段 6** — 反向求职引擎（目标公司图谱 + 直连自荐冷邮件）
+> 状态标签：✅ 已可用 · 🚧 部分（可用但未接通主流程）· 🧱 脚手架（能跑通、缺数据/未上线）
 
-> ⚠️ 插件侧（阶段 1/3）已在 fixture 层测试，但 Boss 直聘/猎聘真实页面的选择器建议按 [extension/README.md](extension/README.md) 实测一轮。
+### ✅ 已可用（Windows 桌面 Agent + 插件完整闭环）
+
+- **本地 JD 库沉淀** —— 插件在 Boss直聘 / 猎聘 浏览岗位时自动提炼，LLM 打结构化标签（技术栈/工时/风险词），完整存进本机 JSONL（数据不出本机），随时回看再筛
+- **匹配度打分（0–100 诊断）** —— 对照简历给每个 JD 评分并说明理由，直接指出匹配/不匹配点
+- **定制简历改写** —— 针对选中 JD 改写（MD / Word 导出），改前可校验
+- **打招呼语一键填入** —— 高回复率开场白生成，并直接填入浏览器聊天框（你确认后才发送）
+- **列表页降噪** —— 风险词规则把外包/单休/驻场等标灰；卡片可 AI 打分
+- **面试准备 + 模拟面试** —— 按 JD 生成面试提问准备（STAR），可多轮模拟对话练习
+- **求职看板** —— 本地 Markdown Kanban（「📊 投递」页），记录投递进度
+- **多模型切换** —— DeepSeek / Qwen / Kimi / 任意 OpenAI 兼容端点，设置里随时换
+- **悬浮对话窗常驻** —— 插件沉淀的新 JD 会出现在 Agent 列表并自动刷新；LLM 任务在后台排队执行，不阻塞浏览
+- **可选匿名用量统计**（默认关闭）—— 开启后只按天上报功能使用次数，无简历/JD/聊天内容
+- **HR 招聘方视图**（可选模块 `hr/`）—— 简历抽取 + 候选人评分/筛选面板
+
+### 🚧 部分可用（后端已通，但未接入 UI 或未自动跑）
+
+- **岗位雷达（HN/V2EX/GitHub → 每日日报）** —— Core 的 `watchdog` 能抓取生成日报，但只能 `npm run watch -w core` 手动跑，未接进 App/插件定时器
+- **反向求职（目标公司 + 冷邮件）** —— `POST /v1/hunt/*` 路由已实现，但**没有 UI**（桌面 Agent 与插件界面都未接入），需靠 API 直调
+- **语义搜索（意图翻译 + LLM 重排）** —— `POST /v1/jd/semantic-search` 路由已通，但**列表页目前仍是关键词本地过滤**，语义搜索未接到前端
+
+### 🧱 脚手架（代码就绪，暂无真实数据/未部署）
+
+- **去中心化情报网** —— 导出器、结构化 Issue 模板、Nostr 发布/订阅、Cloudflare Worker 聚合路由都在，但 `data/intel-feed.json` 为空（未接入真实数据源），Worker 未部署
+
+> ⚠️ 插件选择器（JD 提炼 / 打招呼语 / 降噪）基于 fixture 层测试，Boss 直聘/猎聘真实页面结构会变，建议按 [extension/README.md](extension/README.md) 实测一轮。
 
 ## 🚀 快速开始
 
@@ -87,7 +106,7 @@ App 一键安装，Core 服务、插件、自动更新全部内置，全程无�
 1. 从 [Releases](https://github.com/xxwj225-James/tomi-job-hunt/releases) 下载最新的 **`TomiHuntSetup-<版本>.exe`** 并安装
 2. 打开 **TomiHunt Agent** → ⚙ **设置** → 粘贴第 0 步的 API Key → **保存**（保存时自动测试连接）
 3. 设置 → **浏览器插件** → 点 **「打开扩展页」**（Chrome/Edge 不允许程序自动跳转其内部页，因此不会重启浏览器：点一下会打开/激活浏览器并把 `chrome://extensions` 复制到剪贴板，在地址栏 Ctrl+L 粘贴回车即可到达；主窗口顶部也常驻这两个按钮）→ 开「开发者模式」→「加载已解压的扩展程序」→ 选择插件目录 `%LOCALAPPDATA%\TomiHunt\extension`（可点 **「打开插件目录」** 直接定位它）
-4. 回到 App，列表出现 **「● 在线」** 即插件已联通——之后你在 Boss 直聘 / 猎聘浏览岗位时，插件负责**自动提炼 JD**，Agent 负责**沉淀到本地 JD 库、匹配打分、主动推荐、生成话术**并回填聊天框
+4. 回到 App，列表出现 **「● 在线」** 即插件已联通——之后你在 Boss 直聘 / 猎聘浏览岗位时，插件负责**自动提炼 JD**，Agent 负责**沉淀到本地 JD 库、匹配打分、生成话术**并回填聊天框
 5. 生成的话术填入聊天框 → **你确认后手动发送**
 
 > 单靠插件能完成核心闭环，但没有 Agent 的 JD 库沉淀 / 匹配 / 看板 / 面试准备等能力，也不享受 App 自动更新。想要完整体验请用方式一。
@@ -134,14 +153,14 @@ npm run build -w extension                                # 然后 chrome://exte
 
 ## 💝 支持项目
 
-TomiHunt 永久免费开源（MIT 协议）、默认不收集任何数据（可选匿名用量统计默认关闭，开启才上报纯功能计数）。觉得有用的话，请作者喝杯咖啡 ☕：[爱发电](https://afdian.com/a/jameswu)
+TomiHunt 永久免费开源（MIT 协议）、默认不收集任何数据（可选匿名用量统计默认关闭，开启才上报纯功能计数）。觉得有用的话，**扫码请作者喝杯咖啡 ☕**：
 
-### 云服务推广（返佣链接）
+<p align="center">
+  <img src="docs/images/wechat-donate.jpg" width="200" alt="微信赞赏码">
+  <img src="docs/images/alipay-donate.jpg" width="200" alt="支付宝收款码">
+</p>
 
-> ⚠️ 透明披露：以下链接带有推广返佣——你通过它们购买云服务，作者会获得少量佣金，**你的价格与直接购买完全一致**。
-
-- **阿里云**：[https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6](https://www.aliyun.com/minisite/goods?userCode=x4jbzcb6)（推广码 `x4jbzcb6`，注册/购买时填写）— 使用 **Qwen（通义千问）** 需要阿里云百炼账号；部署情报聚合 Worker 也可用阿里云函数计算
-- **腾讯云**：[https://curl.qcloud.com/9QREcs1T](https://curl.qcloud.com/9QREcs1T) — 云服务器、轻量应用服务器（如需远程部署 Core 服务）
+也可以订阅 [爱发电](https://afdian.com/a/jameswu) 支持长期开发。
 
 ### 其他支持方式
 
@@ -217,10 +236,12 @@ to send reach your LLM API.
   `~/.tomi-job-hunt/config.json` and set a provider, then
   `npm start -w core` and `npm run build -w extension` (load `extension/dist/`
   unpacked). Full guide: [docs/usage.md](docs/usage.md).
-- **Status**: current as of the roadmap above — Windows Agent installer
+- **Status**: current as of the feature map above — Windows Agent installer
   (`TomiHuntSetup-<version>.exe`), Core with JD tagging / matching / tailored
-  resume / interview & mock prep / board / company hunt & cold email, the
-  browser extension, and opt-in usage telemetry (OFF by default).
+  resume / interview & mock prep / board, the browser extension, and opt-in
+  usage telemetry (OFF by default). Backend-only scaffolding exists for the
+  company-hunt/cold-email routes, a semantic-search route and an HN/V2EX/GitHub
+  radar (CLI-only, no UI hookup yet); the intel feed has no live data.
 - **Privacy**: [docs/privacy.md](docs/privacy.md). **Legal**:
   [docs/LEGAL.md](docs/LEGAL.md) and [TAKEDOWN_POLICY.md](TAKEDOWN_POLICY.md).
 

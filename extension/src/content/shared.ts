@@ -478,7 +478,7 @@ export function showPanel(content: {
   const fbHtml = content.feedback ? feedbackBarHtml(content.feedback) : '';
   // Support footer appears on EVERY panel state (tags / match / pitch /
   // interview) — visible placement, never injected into AI-generated text.
-  const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a>（推广返佣/打赏） · <a href="${TOMILITE_URL}" target="_blank" rel="noopener">TomiLite</a>（作者的 AI 助手）</div>`;
+  const supportHtml = `<div class="support">💝 <a href="${SUPPORT_URL}" target="_blank" rel="noopener">支持项目</a> · <a href="${TOMILITE_URL}" target="_blank" rel="noopener">TomiLite</a>（作者的 AI 助手）</div>`;
   setPanelHtml(
     `<div class="h">${escapeHtml(content.title)}</div>${spinner}${rows}${tagsHtml}${pitchHtml}${errorHtml}${inputHtml}<div style="margin-top:8px">${actionsHtml}</div>${fbHtml}${supportHtml}`,
   );
