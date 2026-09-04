@@ -1,6 +1,6 @@
 {
   "name": "@tomi/hr",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "TomiHunt HR screening web app: paste JD + batch upload resumes, AI ranks candidates locally. No plugin required.",
   "type": "module",

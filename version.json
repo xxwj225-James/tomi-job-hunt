@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "releasedAt": "2026-08-27",
-  "notes": "首个开源版本 v0.1.0：直连模式 + 本地 Core + 语义搜索 + 匹配打分 + 情报网",
+  "version": "0.2.0",
+  "releasedAt": "2026-09-04",
+  "notes": "v0.2.0：桌面 Agent 悬浮窗 + 标签页控制、本地 JD 库沉淀、匹配打分、定制简历、模拟面试、投递看板、可选匿名用量统计、README 功能地图对齐",
   "releaseUrl": "https://github.com/xxwj225-James/tomi-job-hunt/releases"
 }
