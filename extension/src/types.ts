@@ -27,6 +27,14 @@ export interface JdTags {
   summary: string;
 }
 
+/** A JD-oriented matching point: one real resume fact, reframed toward the JD. */
+export interface GreetingPoint {
+  /** A JD keyword (from techStack / requirements) the resume genuinely covers. */
+  keyword: string;
+  /** One-line, ≤40 chars — the resume fact restated in the JD's domain framing. */
+  reframed: string;
+}
+
 export interface GreetingRequest {
   jd: {
     title: string;
@@ -38,6 +46,8 @@ export interface GreetingRequest {
   resume?: string;
   /** User feedback on a previous pitch — regeneration guidance. */
   feedback?: string;
+  /** Structured JD tags (techStack/summary) from the tagger — feeds Stage-1 point extraction. */
+  tags?: { techStack?: string[]; summary?: string } | null;
 }
 
 export interface ReplyTurn {
@@ -60,6 +70,8 @@ export interface GreetingResult {
   pitch: string;
   /** Set when resume.md was not configured and the pitch is JD-only. */
   warning?: string;
+  /** Stage-1 JD-oriented matching points the pitch was built from (for display). */
+  points?: GreetingPoint[];
 }
 
 export type WsEvent =

@@ -5,14 +5,12 @@
  * the TaskQueue (see queue.ts). Runs headless: permissions bypassed, tools
  * disabled, settings isolated from the host user's ~/.claude.
  */
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKAssistantMessage, SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ChatChunk, ChatProvider, ChatRequest, ChatResult, LLMConfig } from '../types.js';
 import type { Logger } from '../logger.js';
 import { ChatProviderError } from './chat-provider.js';
+import { hasClaudeCredentials } from './credentials.js';
 
 const MAX_TURNS = 5;
 
@@ -115,14 +113,6 @@ export class ClaudeCodeProvider implements ChatProvider {
 }
 
 // --- helpers ---
-
-/** True when any Anthropic credential source is available (env or CLI login). */
-export function hasClaudeCredentials(): boolean {
-  const env = process.env;
-  if (env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN) return true;
-  // Fallback: claude CLI OAuth login credentials (subscription users).
-  return existsSync(join(homedir(), '.claude', '.credentials.json'));
-}
 
 function buildSystemPrompt(req: ChatRequest): string | undefined {
   const system = req.messages

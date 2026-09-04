@@ -7,6 +7,7 @@ import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
 import { extractJson } from './tagger.js';
 import type { MatchJd } from './match.js';
+import { detectIndustry } from './industry.js';
 
 export const interviewResultSchema = z.object({
   questions: z
@@ -23,10 +24,14 @@ export const interviewResultSchema = z.object({
 export type InterviewResult = z.infer<typeof interviewResultSchema>;
 
 export function buildInterviewPrompt(jd: MatchJd, resume?: string): string {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历：题目按 JD 通用画像出）';
-  return `你是资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。
+  const roleLine = ind
+    ? `你是${ind}行业资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。\n\n结合${ind}行业的技术栈、业务场景与常见深挖点出题。`
+    : '你是资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。';
+  return `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}

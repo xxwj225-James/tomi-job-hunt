@@ -3,7 +3,10 @@
   "name": "TomiHunt — AI 求职雷达",
   "version": "0.1.0",
   "description": "本地 AI 求职助手：JD 提炼、匹配标签、高回复率打招呼语。所有数据留在本机。",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "alarms"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "https://www.zhipin.com/*",
     "https://www.liepin.com/*",

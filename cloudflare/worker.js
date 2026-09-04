@@ -1,9 +1,13 @@
 /**
- * TomiHunt Cloudflare Worker — intel relay (Phase 5C; public community feed).
+ * TomiHunt Cloudflare Worker — intel relay (Phase 5C; public community feed)
+ * + opt-in usage collector reference (see docs/telemetry.md).
  *
  * Routes:
  *   POST /submit — sanitized anonymized intel entries, written to R2 under
  *                  `submissions/`. Never surfaces raw JD text or HR names.
+ *   POST /usage  — anonymous per-day feature-count aggregates from the local
+ *                  Core service (opt-in, default OFF client-side), written to
+ *                  R2 under `usage/<day>/<installId>-<ts>.json`.
  *
  * Security notes:
  *   - R2 binding lives in the worker ENVIRONMENT, never in this source file —
@@ -71,12 +75,61 @@ async function handleIntel(request, env) {
   return json({ ok: true, key }, 201);
 }
 
+/**
+ * POST /usage — anonymous per-day feature counts (opt-in telemetry).
+ *
+ * The local Core service flushes each closed UTC day at most once per
+ * installId (see core/src/usage/telemetry.ts), so entries can simply be
+ * appended. To aggregate, list `usage/<day>/`, sum `events` per installId,
+ * then across installs. Counts only — never content.
+ */
+async function handleUsage(request, env) {
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Invalid JSON', { status: 400 });
+  }
+  if (
+    !body ||
+    typeof body.installId !== 'string' ||
+    typeof body.day !== 'string' ||
+    typeof body.events !== 'object' ||
+    body.events === null
+  ) {
+    return new Response('Missing installId/day/events', { status: 400 });
+  }
+  // Defense in depth: only the well-known client tag and a real UTC date pass.
+  if (body.app !== 'tomi-agent' || !/^\d{4}-\d{2}-\d{2}$/.test(body.day)) {
+    return new Response('Bad app/day', { status: 400 });
+  }
+  const payload = JSON.stringify(body);
+  if (payload.length > 65536) {
+    return new Response('Payload too large', { status: 413 });
+  }
+
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (await rateLimited(env, 'usage', ip, 60)) {
+    return new Response('Rate limited', { status: 429 });
+  }
+
+  const key = `usage/${body.day}/${body.installId}-${Date.now()}.json`;
+  await env.TOMIBUCKET.put(key, payload + '\n');
+  return json({ ok: true, day: body.day }, 201);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/submit') {
       return handleIntel(request, env);
     }
-    return new Response('TomiHunt Relay — POST /submit (intel)', { status: 200 });
+    if (url.pathname === '/usage') {
+      return handleUsage(request, env);
+    }
+    return new Response('TomiHunt Relay — POST /submit (intel) · POST /usage (opt-in usage)', { status: 200 });
   },
 };

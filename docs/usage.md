@@ -116,6 +116,18 @@ export TOMI_API_KEY=sk-你的密钥
 
 优先级：环境变量 > config.json > 内置默认。
 
+### 可选匿名用量统计（默认关闭）
+
+桌面 Agent **设置 → 应用 →「帮助改进 TomiHunt」** 控制（状态存于 `~/.tomi-job-hunt/telemetry.json` 的 `consent`）。默认关闭：不建文件、零出网；开启后仅记录各功能使用次数，并按（UTC 日）合并成一份**匿名纯计数**上报，**不含简历 / JD / 聊天内容**。
+
+| 配置 | 说明 |
+|---|---|
+| 默认端点 | `https://tomatovector.com/api/tomihunt-usage`（作者自建统计服务，仅按天聚合） |
+| `TOMI_TELEMETRY_URL` | 环境变量，自托管 collector 覆盖默认端点（参考仓库内 `cloudflare/worker.js` 的 `/usage`） |
+| `telemetry.json` → `collectorUrl` | 等价覆盖，优先级低于环境变量 |
+
+随时可在设置里关闭：清除当日计数并停止一切上报。详见 [docs/telemetry.md](telemetry.md)。
+
 ## 第 3 步：配置简历（重要，直接影响话术质量）
 
 ```bash
@@ -261,7 +273,6 @@ npm run intel -w core subscribe   # 订阅社区情报
 
 - **贡献情报**：在 GitHub Issue 里用「Job intel report」模板提交（纯勾选事实，无自由文本）
 - **共享边界**：只共享结构化标签与事实，原始 JD 文本 / HR 姓名 / 联系方式在代码层被硬性排除
-- 完整架构与部署说明：[docs/intel-network.md](intel-network.md)
 
 ---
 

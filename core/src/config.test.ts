@@ -15,8 +15,8 @@ describe('loadConfig', () => {
   it('returns defaults when nothing is configured', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tomi-config-'));
     const cfg = await loadConfig({ home: dir, env: {} });
-    expect(cfg.llm.provider).toBe('claude-code');
-    expect(cfg.llm.model).toBe('claude-sonnet-5');
+    expect(cfg.llm.provider).toBe('deepseek');
+    expect(cfg.llm.model).toBe('deepseek-v4-flash');
     expect(cfg.llm.concurrency).toBe(2);
     expect(cfg.port).toBe(34567);
     expect(cfg.logLevel).toBe('info');

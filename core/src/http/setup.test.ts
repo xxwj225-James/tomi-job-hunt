@@ -47,7 +47,7 @@ async function makeHarness(initialConfig?: Record<string, unknown>): Promise<Set
     log: silentLog,
     workDir: join(dir, 'work'),
     reloadProvider: (cfg) => reloaded.push(cfg),
-    createProvider: () => fakeProvider,
+    createProvider: async () => fakeProvider,
   });
   return { app, configDir: dir, reloaded };
 }
@@ -61,6 +61,11 @@ describe('GET /setup', () => {
     expect(html).toContain('TomiHunt 本地服务设置');
     expect(html).toContain('test');
     expect(html).toContain('resume-file');
+    // LLM narrowing: wizard surfaces DeepSeek only (no claude/kimi/qwen options).
+    expect(html).toContain('deepseek');
+    expect(html).toContain('如何获取 DeepSeek API Key');
+    expect(html).not.toContain('claude-code');
+    expect(html).not.toContain('kimi');
     rmSync(configDir, { recursive: true, force: true });
   });
 });
@@ -71,7 +76,7 @@ describe('GET /setup/config', () => {
     const res = await app.request('/setup/config');
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.provider).toBe('claude-code');
+    expect(body.provider).toBe('deepseek');
     expect(body.apiKeySet).toBe(false);
     expect(body.configFileExists).toBe(false);
     rmSync(configDir, { recursive: true, force: true });

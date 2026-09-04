@@ -26,9 +26,29 @@ No intermediate service exists to route through.
 
 ## What we never do
 
-- No telemetry, no analytics, no crash reporting
-- No user accounts, no login, no cloud sync
-- No ads, no tracking pixels
+- No crash reporting, no user accounts, no login, no cloud sync, no ads, no tracking pixels
+- Telemetry is **opt-in and OFF by default** — see the optional section below
+
+## Optional opt-in usage counts (default OFF)
+
+TomiHunt does not collect anything unless you switch on **帮助改进 TomiHunt**
+in the Agent's Settings. When enabled it records — entirely on your machine —
+how many times each feature is used per day (feature-name → count) and uploads
+that day's aggregate once the day closes.
+
+- **Consent gate**: every counter is a hard no-op while the switch is OFF; no
+  telemetry file is even created. Turning the switch OFF immediately erases all
+  counters and stops the flusher.
+- **What is sent**: a random `installId` (generated on first opt-in), the UTC
+  day, platform, app + core versions, and `{ feature: count }` totals. It never
+  contains resumes, JD text, chat content, or any content-bearing field — pure
+  counts only.
+- **Where it goes**: `collectorUrl` — by default a tomatovector.com endpoint,
+  overridable via `telemetry.json` or the `TOMI_TELEMETRY_URL` env var if you
+  self-host your own collector.
+- **Audit**: inspect `~/.tomi-job-hunt/telemetry.json`; the only outbound
+  request is one small POST per closed day. Full detail:
+  [telemetry.md](telemetry.md).
 
 ## API keys
 

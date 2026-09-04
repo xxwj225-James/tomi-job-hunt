@@ -31,16 +31,14 @@ npm run build -w extension
 3. **Load unpacked** → select `extension/dist/`
 4. Start the Core service: `npm run dev -w core`
 
-## Greeting & send modes (Boss直聘 + 猎聘)
+## Greeting delivery (Boss直聘 + 猎聘)
 
 Greeting pitches are generated from the JD + resume on both sites. The
-options page (🤖 → ⚙️ 设置) controls how they are delivered:
-
-- **手动（默认）**: the pitch is filled into the chat box; you confirm and
-  click send yourself
-- **自动发送**: on the chat page (zhipin navigates to /web/geek/chat; liepin
-  opens its chat panel) the pitch is filled and sent automatically — Enter
-  key first, visible send-button click as fallback
+extension **fills the chat box and highlights it — it never sends
+automatically** (compliance): on the chat page (zhipin navigates to
+/web/geek/chat; liepin opens its chat panel) you review the pitch and press
+Enter / click send yourself. The desktop App (headless agent) delivers
+messages the same way: fill + highlight, your confirm, then send.
 
 ## Resume upload (direct mode)
 

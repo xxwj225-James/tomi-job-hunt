@@ -19,3 +19,39 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Additional Use Restrictions
+
+The above permission is granted subject to the following additional
+restrictions ("Use Restrictions"). Any use of the Software that violates
+these restrictions is NOT permitted by this license:
+
+1. **No bulk scraping or harvesting.** You may not use the Software to
+   automatically scrape, crawl, batch-fetch, or otherwise harvest content,
+   job postings, user data, or personal information from any third-party
+   website or platform at scale, or to circumvent any technical protection,
+   rate limit, or anti-bot measure of such platforms.
+
+2. **No automated impersonation of human users.** You may not use the
+   Software to automate, bulk-produce, or mass-dispatch messages (including
+   but not limited to chat messages, applications, or greetings) to evade a
+   platform's human-verification or anti-spam systems, or to impersonate
+   human activity for the purpose of defeating platform controls.
+
+3. **User accountability.** You are solely responsible for complying with
+   the terms of service of any website or platform you use the Software
+   with, and with all applicable laws. The authors of the Software make no
+   representation that any particular use complies with a third party's
+   terms of service.
+
+4. **No liability for misuse.** The authors and copyright holders are not
+   liable for any damages, account suspensions, or legal consequences
+   arising from your use of the Software in violation of these Use
+   Restrictions or of a third party's terms of service.
+
+These Use Restrictions are an integral part of this license. If any
+provision is held invalid or unenforceable, the remaining provisions shall
+remain in full force and effect.
+

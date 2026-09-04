@@ -65,7 +65,7 @@ export async function runWatchdog(configDirOverride?: string): Promise<{ jobs: J
   const workDir = join(configDir, 'work');
   mkdirSync(workDir, { recursive: true });
 
-  const provider = createChatProvider(cfg.llm, log.child('llm'), workDir);
+  const provider = await createChatProvider(cfg.llm, log.child('llm'), workDir);
   const statePath = join(configDir, 'watchdog-state.json');
   const seen = loadSeen(statePath);
 

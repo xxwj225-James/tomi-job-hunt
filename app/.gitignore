@@ -1,0 +1,3 @@
+# electron-vite build output
+out/
+node_modules/

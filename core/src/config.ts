@@ -138,7 +138,9 @@ export async function loadConfig(options?: {
     rawFile = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   }
 
-  const provider: ProviderId = (env.TOMI_PROVIDER ?? file.provider ?? 'claude-code') as ProviderId;
+  // DeepSeek is the default: it is the only provider surfaced in the /setup
+  // wizard (LLM narrowing), and the cheapest domestic option for job hunters.
+  const provider: ProviderId = (env.TOMI_PROVIDER ?? file.provider ?? 'deepseek') as ProviderId;
   if (!PROVIDER_IDS.includes(provider)) {
     throw new Error(
       `Unknown TOMI_PROVIDER "${provider}". Valid: ${PROVIDER_IDS.join(', ')}`,

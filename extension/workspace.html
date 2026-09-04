@@ -53,6 +53,11 @@
       .v-item .ops button { padding: 4px 10px; font-size: 12px; }
       .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
       .compare pre { background: #fafbfd; border-radius: 8px; padding: 8px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow: auto; }
+      .ver-box { border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
+      .ver-box.warn { background: #fef2f2; border: 1px solid #f5c2c2; color: #c0392b; }
+      .ver-box.ok { background: #f0fdf4; border: 1px solid #cde9d6; color: #1a7f37; }
+      .ver-box ul { margin: 6px 0 8px; padding-left: 18px; }
+      .ver-box .ops { display: flex; gap: 8px; margin-top: 8px; }
       .m-setup { margin-bottom: 12px; }
       .m-setup textarea { margin: 6px 0; }
       .m-setup .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -92,7 +97,7 @@
         <button id="b-add">添加</button>
       </div>
       <div class="columns" id="board-columns"></div>
-      <div class="muted">在 Boss直聘/猎聘发打招呼语时，会自动把该岗位记入看板（自动发送时）。也可手动添加。</div>
+      <div class="muted">在看板页或岗位面板点「记录到看板」，可手动把岗位记入看板。打招呼语由你确认后自行发送，不会自动发送。</div>
     </section>
 
     <!-- 简历版本 -->
@@ -105,6 +110,7 @@
         <div class="muted" id="v-resume-hint"></div>
         <button id="v-create" style="margin-top:8px">生成本岗位定制简历</button>
       </div>
+      <div id="v-verify" class="ver-box hidden"></div>
       <div id="v-compare" class="hidden">
         <h3 style="margin:10px 0 4px">A/B 对比</h3>
         <div class="row" style="display:flex;gap:8px">

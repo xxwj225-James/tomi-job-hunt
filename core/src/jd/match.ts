@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
 import { extractJson } from './tagger.js';
+import { detectIndustry } from './industry.js';
 
 export interface MatchJd {
   title: string;
@@ -25,10 +26,14 @@ export const matchResultSchema = z.object({
 export type MatchResult = z.infer<typeof matchResultSchema>;
 
 export function buildMatchPrompt(jd: MatchJd, resume?: string): string {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历：按 JD 通用画像评估，strengths 留空，gaps 写岗位硬性要求）';
-  return `你是资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。
+  const roleLine = ind
+    ? `你是${ind}行业资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。\n\n结合${ind}行业的人才标准与业务特点评估「行业/业务契合度」。`
+    : '你是资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。';
+  return `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}

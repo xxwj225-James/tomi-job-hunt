@@ -2,23 +2,30 @@
  * Provider dispatch. Adding a new LLM (local Ollama, ...) means writing one
  * new class implementing ChatProvider and a case here — nothing else in the
  * service changes. deepseek/kimi/qwen share the OpenAI-compatible client.
+ *
+ * The Claude providers are loaded lazily via dynamic import so their heavy SDK
+ * deps (@anthropic-ai/*, in optionalDependencies) are never loaded at startup
+ * and — when the deps are absent — the service falls back to the setup stub
+ * instead of crashing.
  */
 import type { ChatProvider, ChatRequest, ChatResult, LLMConfig } from '../types.js';
 import type { Logger } from '../logger.js';
-import { ClaudeCodeProvider } from './claude-code.js';
-import { ClaudeAPIProvider } from './claude-api.js';
 import { OpenAICompatProvider } from './openai-compat.js';
 
 /**
  * @param workDir dedicated directory passed as `cwd` to the Claude Code CLI
  *   subprocess, so host user settings/CLAUDE.md are never picked up.
  */
-export function createChatProvider(cfg: LLMConfig, log: Logger, workDir: string): ChatProvider {
+export async function createChatProvider(cfg: LLMConfig, log: Logger, workDir: string): Promise<ChatProvider> {
   switch (cfg.provider) {
-    case 'claude-code':
+    case 'claude-code': {
+      const { ClaudeCodeProvider } = await import('./claude-code.js');
       return new ClaudeCodeProvider(cfg, log, workDir);
-    case 'claude-api':
+    }
+    case 'claude-api': {
+      const { ClaudeAPIProvider } = await import('./claude-api.js');
       return new ClaudeAPIProvider(cfg, log);
+    }
     case 'deepseek':
     case 'kimi':
     case 'qwen':
@@ -29,13 +36,18 @@ export function createChatProvider(cfg: LLMConfig, log: Logger, workDir: string)
 
 /**
  * Creates the provider without letting an unconfigured provider (e.g.
- * claude-code with no credentials) crash the service on startup. Falls back
- * to a stub whose calls explain that the /setup wizard must be completed
- * first — the wizard hot-reloads the real provider once config is saved.
+ * claude-code with no credentials, or a missing optional SDK) crash the
+ * service on startup. Falls back to a stub whose calls explain that the
+ * /setup wizard must be completed first — the wizard hot-reloads the real
+ * provider once config is saved.
  */
-export function createChatProviderSafe(cfg: LLMConfig, log: Logger, workDir: string): ChatProvider {
+export async function createChatProviderSafe(
+  cfg: LLMConfig,
+  log: Logger,
+  workDir: string,
+): Promise<ChatProvider> {
   try {
-    return createChatProvider(cfg, log, workDir);
+    return await createChatProvider(cfg, log, workDir);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.warn(`llm: provider init deferred (${message}) — /setup wizard will complete it`);

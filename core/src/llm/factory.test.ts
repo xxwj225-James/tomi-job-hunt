@@ -21,7 +21,7 @@ const silentLog = new Logger('error', 'test');
 
 describe('createChatProviderSafe', () => {
   it('falls back to a stub when provider init throws (unconfigured claude-code)', async () => {
-    const provider = createChatProviderSafe(
+    const provider = await createChatProviderSafe(
       { provider: 'claude-code', concurrency: 1 },
       silentLog,
       '/tmp/work',
@@ -30,8 +30,8 @@ describe('createChatProviderSafe', () => {
     await expect(provider.chat({ messages: [{ role: 'user', content: 'hi' }] })).rejects.toThrow(/setup/);
   });
 
-  it('returns the real provider when init succeeds', () => {
-    const provider = createChatProviderSafe(
+  it('returns the real provider when init succeeds', async () => {
+    const provider = await createChatProviderSafe(
       { provider: 'deepseek', apiKey: 'sk-x', concurrency: 1 },
       silentLog,
       '/tmp/work',

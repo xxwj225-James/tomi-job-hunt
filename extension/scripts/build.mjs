@@ -54,4 +54,22 @@ for (const name of CONTENT_SCRIPTS) {
   });
 }
 
+// 3) Background service worker — single IIFE at dist/background.js
+await build({
+  configFile: false,
+  root,
+  publicDir: false,
+  build: {
+    outDir: 'dist',
+    emptyOutDir: false,
+    watch,
+    lib: {
+      entry: resolve(root, 'src/background/index.ts'),
+      formats: ['iife'],
+      name: 'TomiHuntAgent',
+      fileName: () => 'background.js',
+    },
+  },
+});
+
 console.log(watch ? 'extension watching for changes…' : 'extension build complete: dist/');

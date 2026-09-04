@@ -11,14 +11,13 @@
     "watch": "tsx src/watchdog/run.ts",
     "intel": "tsx src/intel/run.ts",
     "test": "vitest run",
+    "agent:check": "node scripts/ws-agent-check.mjs",
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.232",
-    "@anthropic-ai/sdk": "0.117.1",
     "@hono/node-server": "^1.14.0",
     "@hono/node-ws": "^1.1.0",
     "hono": "^4.7.0",
@@ -27,6 +26,10 @@
     "pdfjs-dist": "^5.4.624",
     "ws": "^8.18.0",
     "zod": "^4.1.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.232",
+    "@anthropic-ai/sdk": "0.117.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

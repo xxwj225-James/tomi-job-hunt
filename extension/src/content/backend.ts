@@ -7,7 +7,7 @@
  * from the extension, API key configured in the options page).
  */
 import { CORE_BASE as CORE_BASE_FALLBACK, getCoreBase, CoreClient } from '../core-client.js';
-import { directGreeting, directInterviewPrep, directMatch, directReply, directTagJd } from '../direct/prompts.js';
+import { directGreeting, directGreetingPoints, directInterviewPrep, directMatch, directReply, directTagJd } from '../direct/prompts.js';
 import { loadResume } from '../direct/resume.js';
 import type { GreetingResult, JdTags, ReplyRequest, ReplyResult } from '../types.js';
 export type { JdLike } from '../types.js';
@@ -55,14 +55,23 @@ export async function backendTag(jd: JdLike): Promise<JdTags> {
   return directTagJd(jd);
 }
 
-export async function backendGreeting(jd: JdLike, feedback?: string): Promise<GreetingResult> {
+export async function backendGreeting(
+  jd: JdLike,
+  feedback?: string,
+  tags?: JdTags | null,
+): Promise<GreetingResult> {
   // The extension's stored resume wins; Core falls back to its own resume.md
   // only when the extension has none.
   const resume = await loadResume();
   if ((await detectBackend()) === 'core') {
-    return client.greeting({ jd: { ...jd, hrName: jd.hrName }, resume, feedback });
+    return client.greeting({ jd: { ...jd, hrName: jd.hrName }, resume, feedback, tags });
   }
-  return directGreeting(jd, resume, feedback);
+  // Two-stage direct mode: Stage 1 extracts JD-oriented matching points
+  // (reframing resume facts toward the JD's domain), Stage 2 builds the pitch
+  // from those points. Empty points → classic single-pass fallback.
+  const points = await directGreetingPoints(jd, resume, tags);
+  const result = await directGreeting(jd, resume, feedback, points);
+  return { ...result, points };
 }
 
 export async function backendMatch(jd: JdLike) {

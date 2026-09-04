@@ -27,10 +27,16 @@ function mockChromeStorage(): void {
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
   mockChromeStorage();
+  // Test isolation: never hit the real FEEDBACK_ENDPOINT. addFeedback()
+  // fire-and-forgets submitFeedback(), which posts to the production URL with
+  // the real global fetch — without this stub the MAX_FEEDBACK cap test below
+  // leaked 205 `n${i}` fixtures to tomatovector.com on every test run.
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 });
 
 afterEach(() => {
   delete (globalThis as Record<string, unknown>).chrome;
+  vi.unstubAllGlobals();
 });
 
 describe('feedback storage', () => {

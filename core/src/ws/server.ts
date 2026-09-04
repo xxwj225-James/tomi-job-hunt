@@ -8,6 +8,7 @@ import type { WSContext } from 'hono/ws';
 import type { WebSocket } from 'ws';
 import type { WsEvent } from '../types.js';
 import type { Logger } from '../logger.js';
+import { createAgentGateway, type AgentGatewayHooks } from './agent/gateway.js';
 
 export interface WsHub {
   /** Attach the ws server to the running HTTP server: injectWebSocket(server). */
@@ -16,8 +17,11 @@ export interface WsHub {
   clientCount: number;
 }
 
-export function createWsHub(app: Hono, log: Logger): WsHub {
+export function createWsHub(app: Hono, log: Logger, hooks?: AgentGatewayHooks): WsHub {
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  // /agent — headless extension gateway (Agent UI console ↔ extension SW).
+  // Shares the same WebSocketServer so a single injectWebSocket() covers both.
+  createAgentGateway(app, log.child('agent'), upgradeWebSocket, hooks);
   const clients = new Set<WSContext<WebSocket>>();
 
   app.get('/ws', upgradeWebSocket((_c) => ({

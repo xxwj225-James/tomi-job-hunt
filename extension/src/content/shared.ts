@@ -258,13 +258,7 @@ export function observeChatMessages(onIncoming: (text: string) => void): () => v
 
 const LAST_JD_KEY = 'tomihunt-last-jd';
 
-// Auto-send governor: minimum 30s between sends, max 10 per page session.
-// Bulk-message patterns are the classic account-ban trigger — never allow
-// the extension to produce them.
-let lastAutoSendAt = 0;
-let autoSendCount = 0;
-const AUTO_SEND_MIN_INTERVAL_MS = 30_000;
-const AUTO_SEND_MAX_PER_SESSION = 10;
+
 
 export async function saveLastJd(jd: JdCaptureInput): Promise<void> {
   try {
@@ -769,11 +763,15 @@ export async function generatePitch(
         hrName: ctx.jd.hrName,
       },
       effectiveFeedback,
+      ctx.tags ?? undefined, // structured JD tags feed Stage-1 point extraction
     );
     // Handoff: 立即沟通 navigates to /web/geek/chat/* — the chat page script
     // reads the pitch back from chrome.storage.session.
     await savePitch({ pitch: result.pitch, jdTitle: ctx.jd.title, company: ctx.jd.company, url: location.href, ts: Date.now() });
-    const rows = result.warning ? [result.warning] : [];
+    // Show the JD-oriented matching points the pitch was built from, so the
+    // user sees the reframing and can eyeball that nothing was fabricated.
+    const pointRows = (result.points ?? []).slice(0, 3).map((p) => `✅ 匹配点 · ${p.keyword}：${p.reframed}`);
+    const rows = [...pointRows, ...(result.warning ? [result.warning] : [])];
     showPanel({
       title: panelTitle,
       rows,
@@ -835,18 +833,12 @@ function showRegeneratePanel(ctx: CapturedContext, panelTitle: string): void {
   });
 }
 
-// --- Send mode (manual confirm vs auto-send) ---
+// --- Send mode ---
+// Auto-send was removed for compliance: the extension never triggers a send
+// programmatically. Messages are always filled + highlighted for the user to
+// review and send themselves (Enter / the site's send button).
 
-export type SendMode = 'manual' | 'auto';
-
-export async function getSendMode(): Promise<SendMode> {
-  try {
-    const data = await chrome.storage.local.get('tomihunt-send-mode');
-    return data['tomihunt-send-mode'] === 'auto' ? 'auto' : 'manual';
-  } catch {
-    return 'manual';
-  }
-}
+export type SendMode = 'manual';
 
 // Chat-box selector chain: zhipin (contenteditable + textarea variants) and
 // liepin candidates + generic fallbacks. Order matters — first hit wins.
@@ -863,73 +855,35 @@ const CHAT_INPUT_SELECTORS = [
   '[contenteditable="true"]',
 ];
 
-const SEND_BUTTON_SELECTORS = [
-  'button.btn-send',
-  '.chat-op button',
-  '.chat-op [class*="send"]',
-  '.im-send-btn',
-  'button.send-btn',
-  '[class*="send-btn"]',
-  'button[class*="send"]',
-];
 
-/** Presses Enter on the chat input (primary send path on both sites). */
-function pressEnterOnInput(): boolean {
-  const el = document.activeElement as HTMLElement | null;
-  if (!el) return false;
-  // Only fire Enter on plausible chat inputs — dispatching on a random
-  // focused element (e.g. body) would swallow the send-button fallback.
-  const isChatInput =
-    el instanceof HTMLTextAreaElement ||
-    el instanceof HTMLInputElement ||
-    el.isContentEditable ||
-    /chat|im-input|message/i.test(typeof el.className === 'string' ? el.className : '');
-  if (!isChatInput) return false;
-  for (const type of ['keydown', 'keypress', 'keyup'] as const) {
-    el.dispatchEvent(
-      new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
-    );
-  }
-  return true;
-}
 
-/** Clicks the first visible send button candidate. */
-function clickSendButton(): boolean {
-  for (const sel of SEND_BUTTON_SELECTORS) {
-    for (const btn of document.querySelectorAll<HTMLElement>(sel)) {
-      const visible =
-        typeof btn.checkVisibility === 'function'
-          ? btn.checkVisibility()
-          : getComputedStyle(btn).display !== 'none';
-      if (visible) {
-        btn.click();
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-/** Reads whatever text currently sits in the focused chat input. */
-function readChatInputText(): string {
-  const el = document.activeElement as HTMLElement | null;
-  if (!el) return '';
-  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return el.value;
-  if (el.isContentEditable) return el.textContent ?? '';
-  return '';
+/**
+ * Highlights the chat input so the user notices a pitch was filled and is
+ * awaiting review before sending. Clears after 6s.
+ */
+export function highlightChatInput(): void {
+  const el = document.querySelector<HTMLElement>(CHAT_INPUT_SELECTORS.join(','));
+  if (!el) return;
+  const prevOutline = el.style.outline;
+  const prevOutlineOffset = el.style.outlineOffset;
+  el.style.outline = '2px solid #4f7cff';
+  el.style.outlineOffset = '1px';
+  setTimeout(() => {
+    el.style.outline = prevOutline;
+    el.style.outlineOffset = prevOutlineOffset;
+  }, 6000);
 }
 
 /**
- * Sends the message currently sitting in the chat input. Enter-key path
- * first (what the sites' own React handlers listen for), send-button click
- * as fallback. The outgoing text is remembered so its echo in the DOM never
- * triggers a smart reply.
+ * Desktop-app dispatch primitive: fill the chat box and highlight it for the
+ * user to review. NEVER sends — the send action is always the user's own
+ * Enter / click on the site's send button (compliance: no programmatic sends).
  */
-export function sendChatMessage(): boolean {
-  const text = readChatInputText();
-  const sent = pressEnterOnInput() || clickSendButton();
-  if (sent && text) rememberOutgoing(text);
-  return sent;
+export function fillAndSendAgent(text: string): { ok: boolean; sent: boolean; error?: string; pendingConfirm?: boolean } {
+  const filled = fillChatBox(text, CHAT_INPUT_SELECTORS);
+  if (!filled) return { ok: false, sent: false, error: '未找到聊天输入框' };
+  highlightChatInput();
+  return { ok: true, sent: false, pendingConfirm: true };
 }
 
 // 立即沟通/继续沟通 button candidates — clicking one opens the chat window
@@ -943,42 +897,26 @@ const OPEN_CHAT_SELECTORS = [
   '.btn-start-chat',
 ];
 
-/** Auto-logs a greeted board entry once per company|title (dedupe by key). */
-async function logSentToBoard(board: { company: string; title: string; url?: string }): Promise<void> {
-  if (!board.company && !board.title) return;
-  const all = await loadBoard();
-  const key = (c: string, t: string): string => `${c}|${t}`;
-  if (all.some((e) => key(e.company, e.title) === key(board.company, board.title))) return;
-  await addBoardEntry({
-    status: 'greeted',
-    company: board.company || '未知公司',
-    title: board.title || '未知岗位',
-    url: board.url ?? '',
-    source: 'pitch-sent',
-  });
-}
-
 /**
- * Shared fill routine. When autoSend is undefined the stored send mode
- * decides (default: manual — fill only, user clicks send themselves).
- * If no chat input exists yet, tries to OPEN the chat window itself by
- * clicking the site's 立即沟通 button, then retries filling.
- * `board` enables auto-logging a greeted entry when the pitch is actually sent.
+ * Shared fill routine. Auto-send was removed for compliance: the extension
+ * fills + highlights the chat box and the user confirms before sending
+ * (their own Enter / click on the site's send button). If no chat input
+ * exists yet, tries to OPEN the chat window itself by clicking the site's
+ * 立即沟通 button, then retries filling.
  */
 export async function fillPitch(
   pitch: string,
-  autoSend?: boolean,
+  // _autoSend kept only for call-site compatibility (always manual now).
+  _autoSend?: boolean,
   back?: () => void,
-  board?: { company: string; title: string; url?: string },
+  // _board kept for call-site compatibility; board auto-log on send no longer
+  // applies because the extension never sends.
+  _board?: { company: string; title: string; url?: string },
 ): Promise<void> {
-  const shouldAuto = autoSend ?? ((await getSendMode()) === 'auto');
   const filled = fillChatBox(pitch, CHAT_INPUT_SELECTORS);
   if (!filled) {
     const opened = clickOpenChatButton();
     if (opened) {
-      // Chat window opening: zhipin SPA-navigates (the chat-page script takes
-      // over with the stored pitch) or liepin opens a panel in place — poll
-      // briefly and fill if the input appears here.
       showPanel({
         state: 'tagging',
         title: 'TomiHunt',
@@ -988,29 +926,16 @@ export async function fillPitch(
       for (let i = 0; i < 6; i += 1) {
         await new Promise((r) => setTimeout(r, 800));
         if (fillChatBox(pitch, CHAT_INPUT_SELECTORS)) {
-          if (shouldAuto) {
-            await new Promise((r) => setTimeout(r, 600));
-            const sent = sendChatMessage();
-            if (sent && board) await logSentToBoard(board);
-            showPanel({
-              title: 'TomiHunt',
-              rows: sent ? ['✅ 已自动发送。'] : ['已填入 — 请手动按 Enter 发送（内容已保留）。'],
-              pitch,
-              actions: back ? [{ label: '返回', onClick: back }] : [],
-            });
-          } else {
-            showPanel({
-              title: 'TomiHunt',
-              rows: ['✅ 已填入聊天框，确认后自行点击发送。'],
-              pitch,
-              actions: back ? [{ label: '返回', onClick: back }] : [],
-            });
-          }
+          highlightChatInput();
+          showPanel({
+            title: 'TomiHunt',
+            rows: ['✅ 已填入聊天框并高亮。请确认内容后，在聊天页按 Enter 或点击发送。'],
+            pitch,
+            actions: back ? [{ label: '返回', onClick: back }] : [],
+          });
           return;
         }
       }
-      // zhipin navigated away — the chat page script handles it; this page
-      // may be gone already. Leave a graceful note + back path.
       showPanel({
         title: 'TomiHunt',
         rows: ['已打开聊天窗口。若跳转到聊天页，话术会自动带过去，点击面板「填入聊天框」即可。'],
@@ -1027,39 +952,10 @@ export async function fillPitch(
     });
     return;
   }
-  if (shouldAuto) {
-    // Safety governor: auto-send is rate-limited so even heavy usage can
-    // never look like bulk messaging. Exceeding the cap degrades to fill-
-    // only with a notice (the user can still send manually).
-    const now = Date.now();
-    if (now - lastAutoSendAt < AUTO_SEND_MIN_INTERVAL_MS || autoSendCount >= AUTO_SEND_MAX_PER_SESSION) {
-      showPanel({
-        title: 'TomiHunt',
-        rows: ['⚠️ 自动发送过于频繁，已降级为「填入后手动发送」以保护你的账号。'],
-        pitch,
-        actions: back ? [{ label: '返回', onClick: back }] : [],
-      });
-      return;
-    }
-    lastAutoSendAt = now;
-    autoSendCount += 1;
-    // Give the site's React state a beat to settle, then send.
-    await new Promise((r) => setTimeout(r, 800));
-    const sent = sendChatMessage();
-    if (sent && board) await logSentToBoard(board);
-    showPanel({
-      title: 'TomiHunt',
-      rows: sent
-        ? ['✅ 已自动发送。如需调整，可再次生成。']
-        : ['已填入但未找到发送按钮 — 请手动按 Enter 发送（内容已保留）。'],
-      pitch,
-      actions: back ? [{ label: '返回', onClick: back }] : [],
-    });
-    return;
-  }
+  highlightChatInput();
   showPanel({
     title: 'TomiHunt',
-    rows: ['✅ 已填入聊天框，确认后自行点击发送。'],
+    rows: ['✅ 已填入聊天框并高亮。请确认内容后，在聊天页按 Enter 或点击发送。'],
     pitch,
     actions: back ? [{ label: '返回', onClick: back }] : [],
   });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildTailorPrompt, directTailorResume } from './tailor.js';
+import { buildVerifyPrompt, buildTailorPrompt, directTailorResume, mdToHtml, verifyTailorFacts } from './tailor.js';
 import { loadVersions, nextVersionNumber, saveVersion, deleteVersion, markApplied } from './versions.js';
 
 vi.mock('./llm.js', () => ({
@@ -11,19 +11,109 @@ import { directChat } from './llm.js';
 const JD = { title: '高级后端工程师', company: '某某科技', salaryText: '20-30K', requirements: 'Java, Redis, K8s', hrName: '王女士' };
 const RESUME = '# 求职意向\n- 目标岗位：高级后端工程师\n\n# 技能栈\n- Java 5年';
 
+beforeEach(() => {
+  vi.mocked(directChat).mockReset();
+});
+
 describe('buildTailorPrompt', () => {
-  it('includes JD fields, resume and the 6 rewrite rules', () => {
+  it('includes JD fields, resume and the rewrite rules', () => {
     const p = buildTailorPrompt(JD, RESUME);
     expect(p).toContain('高级后端工程师');
     expect(p).toContain('某某科技');
     expect(p).toContain('Java 5年');
     expect(p).toContain('重排序');
-    expect(p).toContain('绝不编造');
     expect(p).toContain('动词 + 动作 + 量化结果');
+  });
+
+  it('forbids fabricating facts: no invented experiences/results/numbers', () => {
+    const p = buildTailorPrompt(JD, RESUME);
+    expect(p).toContain('绝不编造');
+    expect(p).toContain('原样保留，不得改动、不得新增');
+    expect(p).toContain('绝不为了匹配 JD 而编造或臆测');
   });
 
   it('does not leak hrName into the prompt', () => {
     expect(buildTailorPrompt(JD, RESUME)).not.toContain('王女士');
+  });
+});
+
+describe('buildVerifyPrompt', () => {
+  it('includes both base resume and tailored markdown, and the JSON-array instruction', () => {
+    const p = buildVerifyPrompt(RESUME, '## 定制版\n- Java');
+    expect(p).toContain(RESUME);
+    expect(p).toContain('## 定制版');
+    expect(p).toContain('只输出一个 JSON 数组');
+  });
+});
+
+describe('verifyTailorFacts', () => {
+  const result = (text: string) => ({ text, model: 'm', usage: { inputTokens: 5, outputTokens: 5 } });
+
+  it('returns fabricated facts parsed from a JSON array', async () => {
+    vi.mocked(directChat).mockResolvedValue(result('["在字节跳动任职3年","负责百万级并发系统"]'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual(['在字节跳动任职3年', '负责百万级并发系统']);
+    expect(r.unverified).toBe(false);
+  });
+
+  it('tolerates a code fence wrapping the JSON array', async () => {
+    vi.mocked(directChat).mockResolvedValue(result('```json\n["某公司背景"]\n```'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual(['某公司背景']);
+    expect(r.unverified).toBe(false);
+  });
+
+  it('returns an empty clean list for []', async () => {
+    vi.mocked(directChat).mockResolvedValue(result('[]'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual([]);
+    expect(r.unverified).toBe(false);
+  });
+
+  it('marks unverified when the model returns non-JSON', async () => {
+    vi.mocked(directChat).mockResolvedValue(result('抱歉，我无法判断。'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual([]);
+    expect(r.unverified).toBe(true);
+  });
+
+  it('marks unverified when the verifier call throws', async () => {
+    vi.mocked(directChat).mockRejectedValue(new Error('API 错误 429'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual([]);
+    expect(r.unverified).toBe(true);
+  });
+
+  it('dedupes repeated fabricated mentions', async () => {
+    vi.mocked(directChat).mockResolvedValue(result('["在字节跳动3年","在字节跳动3年"]'));
+    const r = await verifyTailorFacts(RESUME, '# 定制版');
+    expect(r.fabricated).toEqual(['在字节跳动3年']);
+  });
+});
+
+describe('mdToHtml', () => {
+  it('renders headings, bold, code and lists', () => {
+    const html = mdToHtml('# 张三\n\n## 技能栈\n\n- **Java** 5年\n- `Redis`\n\n三年经验。', '张三');
+    expect(html).toContain('<title>张三</title>');
+    expect(html).toContain('<h1>张三</h1>');
+    expect(html).toContain('<h2>技能栈</h2>');
+    expect(html).toContain('<li><strong>Java</strong> 5年</li>');
+    expect(html).toContain('<li><code>Redis</code></li>');
+    expect(html).toContain('<p>三年经验。</p>');
+  });
+
+  it('escapes raw HTML in content', () => {
+    const html = mdToHtml('## <script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('is print-ready: 保存为 PDF toolbar + @media print hides it', () => {
+    const html = mdToHtml('# x');
+    expect(html).toContain('保存为 PDF');
+    expect(html).toContain('window.print()');
+    expect(html).toContain('@media print');
+    expect(html).toContain('.toolbar { display: none; }');
   });
 });
 
@@ -80,6 +170,12 @@ describe('versions CRUD', () => {
     expect(v2.version).toBe(1);
     expect(v2.note).toBe('新备注');
     expect(await loadVersions()).toHaveLength(1);
+  });
+
+  it('persists verified flag', async () => {
+    const v = await saveVersion({ jdKey: 'a|b', jdTitle: 'a', company: 'b', markdown: 'm', createdBy: 'tailor', verified: true });
+    expect(v.verified).toBe(true);
+    expect((await loadVersions())[0]!.verified).toBe(true);
   });
 
   it('markApplied sets appliedAt; deleteVersion removes', async () => {

@@ -1,0 +1,49 @@
+# TomiHunt Agent — NSIS installer (NOT run automatically; user-invoked `npm run pack` only).
+# Per-user install, floating-window desktop app.
+#
+# Bundled payload (via extraResources, unpacked next to the asar):
+#   resources/core/      ← core runtime staged by scripts/pack.mjs (dist + package.json + prod node_modules)
+#   resources/extension/ ← extension/dist (the headless MV3 extension), copied to the fixed
+#                          %LOCALAPPDATA%\TomiHunt\extension dir by install-guide on first run.
+# Staging dir sits OUTSIDE the release output dir on purpose (release/ is wiped per build).
+
+appId: com.tomihunt.agent
+productName: TomiHunt Agent
+directories:
+  buildResources: resources
+  output: ../release
+files:
+  - out/**
+  - resources/**
+asarUnpack:
+  - out/main/**
+extraResources:
+  # electron-builder's copy filter drops a top-level child literally named
+  # `node_modules` (default exclusion in util/filter.js) — so ship the payload
+  # as separate entries whose from-roots avoid that name:
+  #   core/dist + core/package.json + core/node_modules → resources/core
+  - from: ../.pack-stage/core/dist
+    to: core/dist
+  - from: ../.pack-stage/core/package.json
+    to: core/package.json
+  - from: ../.pack-stage/core/node_modules
+    to: core/node_modules
+  - from: ../extension/dist
+    to: extension
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: TomiHunt Agent
+  createDesktopShortcut: always
+  deleteAppDataOnUninstall: false
+  artifactName: TomiHuntSetup-${version}.exe
+publish:
+  provider: github
+  owner: xxwj225-James
+  repo: tomi-job-hunt

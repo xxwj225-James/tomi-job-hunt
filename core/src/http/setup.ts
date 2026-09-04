@@ -26,8 +26,9 @@ export interface SetupDeps {
   log: Logger;
   /** Recreate the active provider after a config save (hot reload). */
   reloadProvider: (cfg: LLMConfig) => void;
-  /** Provider factory — injectable for tests. */
-  createProvider: (cfg: LLMConfig, log: Logger, workDir: string) => ChatProvider;
+  /** Provider factory — injectable for tests. Async: claude providers load
+   *  lazily via dynamic import (optional deps). */
+  createProvider: (cfg: LLMConfig, log: Logger, workDir: string) => Promise<ChatProvider>;
   /** Dedicated work dir for claude-code subprocess isolation. */
   workDir: string;
 }
@@ -70,7 +71,7 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
 
   app.get('/setup/config', (c) => {
     const raw = readConfigFile(configDir);
-    const provider = (raw.provider as ProviderId | undefined) ?? 'claude-code';
+    const provider = (raw.provider as ProviderId | undefined) ?? 'deepseek';
     const model = (raw.model as string | undefined) ?? '';
     const apiKeySet = existsSync(secretPath(configDir));
     const apiKeyMasked = apiKeySet ? 'sk-****' : undefined;
@@ -105,7 +106,7 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
       const saved = await saveConfigFile(configDir, patch, log);
       // Hot-reload the running provider so the change applies without a restart.
       // The key comes from the encrypted secret store — never from config.json.
-      const provider = (saved.provider as ProviderId) ?? 'claude-code';
+      const provider = (saved.provider as ProviderId) ?? 'deepseek';
       const llm: LLMConfig = {
         provider,
         model: (saved.model as string | undefined) || PROVIDER_PRESETS[provider]?.defaultModel,
@@ -145,7 +146,8 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
       return c.json({ ok: false, error: `Invalid request: ${detail}` }, 400);
     }
     const { provider, model, apiKey, baseUrl, thinking } = parsed.data;
-    if (!apiKey && provider !== 'claude-code') {
+    // LLM narrowing: every wizard provider needs a key (no claude-code path anymore).
+    if (!apiKey) {
       return c.json({ ok: false, error: '请填写 API Key 再测试连接' }, 400);
     }
     const cfg: LLMConfig = {
@@ -158,7 +160,7 @@ export function registerSetupRoutes(app: Hono, deps: SetupDeps): void {
       thinking: thinking === true,
       concurrency: 1,
     };
-    const probe = deps.createProvider(cfg, log.child('setup-test'), deps.workDir);
+    const probe = await deps.createProvider(cfg, log.child('setup-test'), deps.workDir);
     try {
       const result = await probe.chat({ messages: [{ role: 'user', content: '回复：OK' }] });
       return c.json({
@@ -227,16 +229,21 @@ const PROVIDER_LABELS: Record<string, string> = {
   'openai-compatible': 'OpenAI 兼容端点（自建/OneAPI/Ollama）',
 };
 
+// LLM narrowing: the wizard only surfaces DeepSeek. The provider enum and
+// presets stay in config.ts so other providers keep working when configured
+// directly (config.json / TOMI_PROVIDER).
+const WIZARD_PROVIDERS: readonly ProviderId[] = ['deepseek'];
+
 function setupPageHtml(presets: Record<string, { baseUrl: string; defaultModel?: string }>): string {
   const presetJson = JSON.stringify(
     Object.fromEntries(
-      PROVIDER_IDS.map((id) => [
+      WIZARD_PROVIDERS.map((id) => [
         id,
         { ...presets[id], defaultModel: presets[id]?.defaultModel ?? '' },
       ]),
     ),
   ).replace(/</g, '\\u003c');
-  const options = PROVIDER_IDS.map(
+  const options = WIZARD_PROVIDERS.map(
     (id) => `<option value="${id}">${PROVIDER_LABELS[id] ?? id}</option>`,
   ).join('');
 
@@ -278,6 +285,14 @@ function setupPageHtml(presets: Record<string, { baseUrl: string; defaultModel?:
   <label for="apiKey">API Key</label>
   <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
   <p class="hint" id="key-hint">只保存在本机。留空表示不修改已保存的 Key。</p>
+  <details class="hint" style="margin-top:10px;cursor:pointer">
+    <summary>第一次用？如何获取 DeepSeek API Key</summary>
+    <ol style="margin:8px 0 0 20px;padding:0">
+      <li>浏览器打开 <b>platform.deepseek.com</b>，注册 / 登录账号；</li>
+      <li>进入「API Keys」→「创建 API Key」→ 复制以 <code>sk-</code> 开头的密钥；</li>
+      <li>粘贴到上方「API Key」输入框 → 点「测试连接」→ 保存设置。</li>
+    </ol>
+  </details>
 
   <label for="baseUrl">API 地址（可选，默认按服务商预设）</label>
   <input type="text" id="baseUrl" placeholder="留空使用默认地址">
@@ -333,7 +348,7 @@ function collectCfg() {
 
 $('test').addEventListener('click', async () => {
   const body = collectCfg();
-  if (!body.apiKey && body.provider !== 'claude-code') {
+  if (!body.apiKey) {
     show(statusEl, false, '请先填写 API Key');
     return;
   }

@@ -2,12 +2,16 @@
  * 简历版本 tab — per-JD tailored resume versions (direct/versions.ts) with
  * create / mark-applied / note / export .md / A/B compare. JD source: a board
  * entry or pasted JD text; the base resume comes from the options page.
+ *
+ * Generation pipeline: AI 改写 → verifyTailorFacts（防编造校验）→ 通过才自动保存；
+ * 发现编造则列出违规事实并阻止保存（可人工核对后强制保存）。每版可打开 HTML
+ * 预览 / 保存为 PDF（打印样式页 + window.print()，零依赖）。
  */
 import { loadBoard } from '../direct/board.js';
 import { loadResume } from '../direct/resume.js';
 import { deleteVersion, loadVersions, markApplied, saveVersion } from '../direct/versions.js';
 import type { ResumeVersion } from '../direct/versions.js';
-import { directTailorResume } from '../direct/tailor.js';
+import { directTailorResume, mdToHtml, verifyTailorFacts } from '../direct/tailor.js';
 import { esc, jdFromText, jdKey } from './jd.js';
 import type { WsJd } from './jd.js';
 
@@ -22,6 +26,7 @@ export function mountVersions(): void {
   const bSel = document.getElementById('v-b') as HTMLSelectElement;
   const aPre = document.getElementById('v-a-pre') as HTMLPreElement;
   const bPre = document.getElementById('v-b-pre') as HTMLPreElement;
+  const verifyBox = document.getElementById('v-verify') as HTMLDivElement;
 
   async function refreshJdSelect(): Promise<void> {
     const entries = await loadBoard();
@@ -44,7 +49,34 @@ export function mountVersions(): void {
     return fromText.title || fromText.requirements ? fromText : null;
   }
 
-  createBtn.addEventListener('click', async () => {
+  /** Show a verification result box with optional 重新生成 / 仍要保存 actions. */
+  function showVerify(
+    kind: 'warn' | 'ok',
+    msg: string,
+    items: string[] = [],
+    actions?: { regen?: () => void; force?: () => void },
+  ): void {
+    verifyBox.classList.remove('hidden');
+    verifyBox.className = `ver-box ${kind}`;
+    verifyBox.innerHTML =
+      `<div>${esc(msg)}</div>` +
+      (items.length ? `<ul>${items.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '') +
+      (actions
+        ? `<div class="ops">${
+            actions.regen ? '<button id="v-regen" class="secondary">重新生成</button>' : ''
+          }${actions.force ? '<button id="v-force" class="secondary">我检查过了，仍要保存</button>' : ''}</div>`
+        : '');
+    verifyBox.querySelector<HTMLButtonElement>('#v-regen')?.addEventListener('click', () => {
+      verifyBox.classList.add('hidden');
+      actions?.regen?.();
+    });
+    verifyBox.querySelector<HTMLButtonElement>('#v-force')?.addEventListener('click', () => {
+      verifyBox.classList.add('hidden');
+      actions?.force?.();
+    });
+  }
+
+  async function generate(): Promise<void> {
     const resume = await loadResume();
     if (!resume) {
       resumeHint.textContent = '未检测到本机简历：请先在 插件图标 → 设置 → 简历 里粘贴或上传简历，再来生成定制版。';
@@ -57,39 +89,98 @@ export function mountVersions(): void {
     }
     createBtn.disabled = true;
     createBtn.textContent = 'AI 定制中…（约 5-15 秒）';
+    verifyBox.classList.add('hidden');
     try {
       const markdown = await directTailorResume(jd, resume);
-      await saveVersion({
-        jdKey: jdKey({ title: jd.title || '未知岗位', company: jd.company }),
-        jdTitle: jd.title || '未知岗位',
-        company: jd.company,
-        markdown,
-        createdBy: 'tailor',
-      });
-      resumeHint.textContent = '✅ 已生成并保存。';
-      await render();
+      const key = jdKey({ title: jd.title || '未知岗位', company: jd.company });
+      const title = jd.title || '未知岗位';
+      const save = async (verified?: boolean): Promise<void> => {
+        await saveVersion({
+          jdKey: key,
+          jdTitle: title,
+          company: jd.company,
+          markdown,
+          createdBy: 'tailor',
+          verified,
+        });
+        resumeHint.textContent = verified ? '✅ 已生成并通过事实校验，已保存。' : '✅ 已生成并保存。';
+        await render();
+      };
+
+      const ver = await verifyTailorFacts(resume, markdown);
+      if (ver.fabricated.length > 0) {
+        showVerify(
+          'warn',
+          '⚠️ 事实校验发现以下内容在原简历中不存在，已阻止自动保存（确认无误后可手动保存）：',
+          ver.fabricated,
+          {
+            regen: () => {
+              void generate();
+            },
+            force: () => {
+              void save();
+            },
+          },
+        );
+        return;
+      }
+      if (ver.unverified) {
+        showVerify('ok', '⚠️ 本次事实校验不可用（模型未返回可解析结果），已保存——请手动核对关键数字与经历。', [], {});
+      }
+      await save(!ver.unverified);
     } catch (err) {
       resumeHint.textContent = `生成失败：${(err as Error).message}`;
     } finally {
       createBtn.disabled = false;
       createBtn.textContent = '生成本岗位定制简历';
     }
+  }
+
+  createBtn.addEventListener('click', () => {
+    void generate();
   });
+
+  /** Open the tailored resume as a print-ready HTML page; optionally trigger PDF print. */
+  function openResume(v: ResumeVersion, autoPrint: boolean): void {
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('浏览器拦截了弹窗：请允许本页面打开新窗口后重试。');
+      return;
+    }
+    w.document.open();
+    w.document.write(mdToHtml(v.markdown, `${v.jdTitle} 定制简历 v${v.version}`));
+    w.document.close();
+    if (autoPrint) {
+      // Let the print-ready page settle, then open the print dialog (用户选「另存为 PDF」).
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch {
+          // Fallback: the page's own 保存为 PDF toolbar button.
+        }
+      }, 350);
+    }
+  }
 
   function vItem(v: ResumeVersion): string {
     const applied = v.appliedAt
       ? `<span class="badge">已投递 ${new Date(v.appliedAt).toLocaleDateString()}</span>`
       : '';
+    const verified = v.verified ? '<span class="badge">已校验</span>' : '';
     return `
       <div class="v-item" data-id="${esc(v.id)}">
         <div class="head">
           <b>v${v.version}</b>
           <span class="muted">${v.createdBy === 'tailor' ? 'AI 定制' : '手动'}</span>
+          ${verified}
           ${applied}
           ${v.note ? `<span class="muted">${esc(v.note)}</span>` : ''}
         </div>
         <pre>${esc(v.markdown.slice(0, 600))}${v.markdown.length > 600 ? '\n…（展开省略）' : ''}</pre>
         <div class="ops">
+          <button data-act="html">HTML 预览</button>
+          <button data-act="pdf" class="secondary">保存为 PDF</button>
           <button data-act="applied">标记已投递</button>
           <button data-act="note" class="secondary">备注</button>
           <button data-act="export" class="secondary">导出 .md</button>
@@ -145,7 +236,11 @@ export function mountVersions(): void {
     const all = await loadVersions();
     const v = all.find((x) => x.id === id);
 
-    if (act === 'applied' && v) {
+    if (act === 'html' && v) {
+      openResume(v, false);
+    } else if (act === 'pdf' && v) {
+      openResume(v, true);
+    } else if (act === 'applied' && v) {
       await markApplied(id);
       await render();
     } else if (act === 'note' && v) {

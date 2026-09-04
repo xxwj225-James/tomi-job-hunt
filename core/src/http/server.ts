@@ -33,12 +33,16 @@ import { loadResumeFile } from '../jd/resume-files.js';
 import { scoreJd } from '../jd/match.js';
 import { semanticSearch } from '../jd/semantic-search.js';
 import { mdToHtml, tailorResume } from '../jd/tailor.js';
+import { verifyTailorFacts } from '../jd/verify.js';
 import { interviewPrep } from '../jd/interview.js';
+import { mockTurn, mockWrapUp, type MockTurn } from '../jd/mock.js';
 import { replyToHr, type ReplyTurn } from '../jd/reply.js';
 import { Board, BOARD_STATUSES } from '../jd/board.js';
+import type { FeedbackStore } from '../jd/feedback.js';
 import { draftColdEmail, huntCompanies } from '../hunt/reverse.js';
 import type { UpdateCheck } from '../version.js';
 import type { JdStore } from '../jd/store.js';
+import type { UsageTelemetry } from '../usage/telemetry.js';
 
 const chatRequestSchema = z.object({
   messages: z
@@ -62,8 +66,12 @@ export interface RouteDeps {
   /** Config dir (~/.tomi-job-hunt) — resume files / board.md live here. */
   configDir: string;
   board: Board;
+  /** Generation-preference feedback store (thumbs + tags + notes). */
+  feedback: FeedbackStore;
   /** OTA update check accessor (refreshed by the version-check poller). */
   update?: () => UpdateCheck;
+  /** Opt-in usage counters — no-op while consent is OFF. */
+  usage: UsageTelemetry;
 }
 
 const boardAddSchema = z.object({
@@ -72,6 +80,13 @@ const boardAddSchema = z.object({
   title: z.string().min(1).max(200),
   url: z.string().max(500).default(''),
   note: z.string().max(200).optional(),
+});
+
+const feedbackAddSchema = z.object({
+  feature: z.string().min(1).max(20),
+  thumbs: z.enum(['up', 'down']).optional(),
+  tags: z.array(z.string().min(1).max(40)).max(8).default([]),
+  note: z.string().max(500).optional(),
 });
 
 const huntCompaniesSchema = z.object({
@@ -97,6 +112,14 @@ const greetingRequestSchema = z.object({
   }),
   resume: z.string().optional(),
   feedback: z.string().max(500).optional(),
+  /** Structured JD tags (techStack/summary) from the tagger — feed Stage-1 point extraction. */
+  tags: z
+    .object({
+      techStack: z.array(z.string()).optional(),
+      summary: z.string().optional(),
+    })
+    .optional()
+    .nullable(),
 });
 
 const jdWithResumeSchema = z.object({
@@ -139,6 +162,33 @@ const exportSchema = z.object({
   format: z.enum(['md', 'doc']).default('md'),
   jdTitle: z.string().optional(),
 });
+
+const resumeVerifySchema = z.object({
+  markdown: z.string().min(1).max(60000),
+  resume: z.string().optional(),
+});
+
+const mockTurnSchema = z.object({
+  jd: z.object({
+    title: z.string().min(1),
+    company: z.string().min(1),
+    salaryText: z.string().default(''),
+    requirements: z.string().default(''),
+  }),
+  resume: z.string().optional(),
+  history: z
+    .array(
+      z.object({
+        speaker: z.enum(['ai', 'user']),
+        content: z.string().max(4000),
+      }),
+    )
+    .max(40)
+    .default([]),
+  turnNumber: z.number().int().min(1).max(200).default(1),
+});
+
+const mockWrapupSchema = mockTurnSchema.omit({ turnNumber: true });
 
 export function registerRoutes(app: Hono, deps: RouteDeps): void {
   // Permissive CORS: the service binds 127.0.0.1 only, and MV3 extensions
@@ -198,6 +248,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     const jobUid = computeJobUid(input.company, input.title);
     const record: JdRecord = { ...input, jobUid, capturedAt: new Date().toISOString() };
     deps.store.save(record);
+    deps.usage.count('jd_capture');
     deps.log.info(`jd: captured ${jobUid} (${input.company} — ${input.title})`);
 
     // Tag asynchronously through the queue; result arrives via WS 'jd/tagged'.
@@ -298,7 +349,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const detail = parsed.error.issues.map((i) => i.message).join('; ');
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
-    const { jd, resume, feedback } = parsed.data;
+    const { jd, resume, feedback, tags } = parsed.data;
     // Prefer the local resume file (md/txt/docx/pdf) unless the caller
     // passed an explicit resume.
     const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
@@ -307,8 +358,9 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     try {
       const result = await deps.queue.run(async () => {
         deps.ws.broadcast({ type: 'job/started', jobId });
-        return await greetJd(deps.provider, jd, effectiveResume, deps.log.child(`greet:${jobId.slice(0, 8)}`), feedback);
+        return await greetJd(deps.provider, jd, effectiveResume, deps.log.child(`greet:${jobId.slice(0, 8)}`), feedback, tags);
       });
+      deps.usage.count('greeting');
       deps.ws.broadcast({ type: 'job/done', jobId, result });
       return c.json(result);
     } catch (err) {
@@ -334,6 +386,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         scoreJd(deps.provider, jd, effectiveResume, deps.log.child('match')),
       );
+      deps.usage.count('match');
       deps.log.info(`match: score=${result.score} verdict=${result.verdict} (${jd.company} — ${jd.title})`);
       return c.json({
         ...result,
@@ -359,6 +412,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         semanticSearch(deps.provider, deps.store, parsed.data.query, deps.log.child('search')),
       );
+      deps.usage.count('semantic_search');
       return c.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -383,6 +437,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const tailoredMd = await deps.queue.run(() =>
         tailorResume(deps.provider, jd, effectiveResume, deps.log.child('tailor')),
       );
+      deps.usage.count('resume_tailor');
       return c.json({ tailoredMd });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -400,6 +455,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     }
     const { tailoredMd, format, jdTitle } = parsed.data;
     const safeTitle = (jdTitle ?? 'resume').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'resume';
+    deps.usage.count('resume_export');
     if (format === 'md') {
       return new Response(tailoredMd, {
         headers: {
@@ -418,6 +474,32 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     });
   });
 
+  app.post('/v1/resume/verify', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = resumeVerifySchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { markdown, resume } = parsed.data;
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
+    if (!effectiveResume) {
+      return c.json({ error: '未配置简历：请先创建 ~/.tomi-job-hunt/resume.md / resume.docx / resume.pdf' }, 400);
+    }
+    try {
+      const result = await deps.queue.run(() =>
+        verifyTailorFacts(deps.provider, effectiveResume, markdown, deps.log.child('verify')),
+      );
+      deps.usage.count('resume_verify');
+      deps.log.info(`resume verify: ${result.fabricated.length} fabricated facts${result.unverified ? ' (unverified)' : ''}`);
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
   // --- Phase 3: interview prep ---
 
   app.post('/v1/interview-prep', async (c) => {
@@ -433,7 +515,53 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         interviewPrep(deps.provider, jd, effectiveResume, deps.log.child('interview')),
       );
+      deps.usage.count('interview_prep');
       deps.log.info(`interview: ${result.questions.length} questions for ${jd.company}`);
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  // --- Turn-based mock interview (Agent UI InterviewPanel) ---
+
+  app.post('/v1/mock/turn', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = mockTurnSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume, history, turnNumber } = parsed.data;
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
+    try {
+      const result = await deps.queue.run(() =>
+        mockTurn(deps.provider, jd, effectiveResume, history as MockTurn[], turnNumber, deps.log.child('mock')),
+      );
+      deps.usage.count('mock_turn');
+      return c.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = err instanceof ChatProviderError ? 502 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  app.post('/v1/mock/wrapup', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = mockWrapupSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const { jd, resume, history } = parsed.data;
+    const effectiveResume = resume ?? (await loadResumeFile(deps.configDir, deps.log));
+    try {
+      const result = await deps.queue.run(() =>
+        mockWrapUp(deps.provider, jd, effectiveResume, history as MockTurn[], deps.log.child('mock')),
+      );
       return c.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -458,6 +586,34 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       return c.json({ error: `Invalid request: ${detail}` }, 400);
     }
     const entry = deps.board.add(parsed.data);
+    deps.usage.count('board_add');
+    return c.json(entry, 201);
+  });
+
+  // --- Generation-preference feedback (shared personal-rules bank) ---
+
+  app.get('/v1/feedback', (c) =>
+    c.json({
+      path: deps.feedback.path,
+      count: deps.feedback.size,
+      entries: deps.feedback.recent(50),
+      rules: deps.feedback.rules(),
+    }),
+  );
+
+  app.post('/v1/feedback', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = feedbackAddSchema.safeParse(body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues.map((i) => i.message).join('; ');
+      return c.json({ error: `Invalid request: ${detail}` }, 400);
+    }
+    const entry = deps.feedback.add({
+      feature: parsed.data.feature,
+      thumbs: parsed.data.thumbs,
+      tags: parsed.data.tags,
+      note: parsed.data.note?.trim() || undefined,
+    });
     return c.json(entry, 201);
   });
 
@@ -476,6 +632,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         replyToHr(deps.provider, jd, effectiveResume, history as ReplyTurn[], incoming, deps.log.child('reply')),
       );
+      deps.usage.count('reply');
       return c.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -498,6 +655,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         huntCompanies(deps.provider, skills, cities, count, deps.log.child('hunt')),
       );
+      deps.usage.count('hunt_companies');
       deps.log.info(`hunt: ${result.companies.length} target companies for [${skills.slice(0, 3).join(', ')}…]`);
       return c.json(result);
     } catch (err) {
@@ -520,6 +678,7 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
       const result = await deps.queue.run(() =>
         draftColdEmail(deps.provider, company, skills, effectiveResume, context, deps.log.child('hunt')),
       );
+      deps.usage.count('cold_email');
       return c.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

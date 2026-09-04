@@ -17,6 +17,13 @@ describe('buildInterviewPrompt', () => {
     expect(prompt).toContain('STAR');
     expect(prompt).toContain('只输出 JSON');
   });
+
+  it('injects the detected industry into the role line', () => {
+    const gameJd = { ...jd, title: '游戏服务器开发', requirements: '手游后端，熟悉 Netty' };
+    const prompt = buildInterviewPrompt(gameJd, '# 简历\n- Java 5 年');
+    expect(prompt).toContain('游戏行业资深面试官');
+    expect(prompt).toContain('结合游戏行业的技术栈');
+  });
 });
 
 describe('parseInterviewResponse', () => {

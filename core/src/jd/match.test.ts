@@ -19,6 +19,18 @@ describe('buildMatchPrompt', () => {
   it('notes when resume is missing', () => {
     expect(buildMatchPrompt(jd)).toContain('未提供简历');
   });
+
+  it('injects the detected industry into the role line', () => {
+    const gameJd = { ...jd, title: '游戏客户端开发', requirements: 'Unity 手游开发，3 年经验' };
+    const prompt = buildMatchPrompt(gameJd, '# 简历\n- Unity 3 年');
+    expect(prompt).toContain('游戏行业资深求职顾问');
+  });
+
+  it('keeps the generic role when no industry is detected', () => {
+    const prompt = buildMatchPrompt({ ...jd, title: '销售经理', requirements: '负责渠道拓展' });
+    expect(prompt).toContain('资深求职顾问');
+    expect(prompt).not.toContain('游戏行业');
+  });
 });
 
 describe('parseMatchResponse', () => {

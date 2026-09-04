@@ -18,9 +18,12 @@ import { createChatProvider, createChatProviderSafe } from './llm/factory.js';
 import { createWsHub } from './ws/server.js';
 import { registerRoutes } from './http/server.js';
 import { registerSetupRoutes } from './http/setup.js';
+import { registerUsageRoutes } from './http/usage.js';
+import { UsageTelemetry } from './usage/telemetry.js';
 import { JdStore } from './jd/store.js';
 import { Board } from './jd/board.js';
-import { hasClaudeCredentials } from './llm/claude-code.js';
+import { FeedbackStore } from './jd/feedback.js';
+import { hasClaudeCredentials } from './llm/credentials.js';
 import { buildUpdateCheck, fetchRemoteVersion, type UpdateCheck } from './version.js';
 import type { ChatProvider, LLMConfig } from './types.js';
 
@@ -92,7 +95,7 @@ async function main(): Promise<void> {
   // the service up (stub provider) when nothing is configured yet, so the
   // first-run setup wizard can actually be reached.
   const providerRef: { current: ChatProvider } = {
-    current: createChatProviderSafe(cfg.llm, log.child('llm'), workDir),
+    current: await createChatProviderSafe(cfg.llm, log.child('llm'), workDir),
   };
   const providerView: ChatProvider = {
     get id() {
@@ -105,6 +108,18 @@ async function main(): Promise<void> {
   const queue = new TaskQueue(cfg.llm.concurrency, log.child('queue'));
   const store = new JdStore(join(cfg.configDir, 'data'), log.child('store'));
   const board = new Board(cfg.configDir, log.child('board'));
+  const feedback = new FeedbackStore(cfg.configDir, log.child('feedback'));
+
+  // Opt-in anonymous usage telemetry (default OFF). Stored in its own file so
+  // consent state is never dropped by config.json's schema/whitelist. Startup
+  // catch-up + the 6h interval flush closed days only when the user opted in.
+  const usage = new UsageTelemetry({
+    configDir: cfg.configDir,
+    log: log.child('usage'),
+    coreVersion: CURRENT_VERSION,
+  });
+  usage.flushStaleIfAny();
+  usage.start();
 
   // OTA: non-blocking version check at startup + every 6h. Never blocks boot.
   const updateRef: { current: UpdateCheck } = {
@@ -121,7 +136,11 @@ async function main(): Promise<void> {
   setInterval(() => void pollVersion(), 6 * 3600 * 1000).unref();
 
   const app = new Hono();
-  const ws = createWsHub(app, log.child('ws'));
+  const ws = createWsHub(app, log.child('ws'), {
+    // Headless extension (agent role) came online → daily presence. markDaily
+    // is idempotent, so the SW's ~30s reconnects never double count.
+    onAgentHello: () => usage.markDaily('ext_online'),
+  });
   registerRoutes(app, {
     provider: providerView,
     queue,
@@ -130,17 +149,27 @@ async function main(): Promise<void> {
     store,
     configDir: cfg.configDir,
     board,
+    feedback,
     update: () => updateRef.current,
+    usage,
   });
   registerSetupRoutes(app, {
     configDir: cfg.configDir,
     log: log.child('setup'),
     workDir,
     reloadProvider: (llm: LLMConfig) => {
-      providerRef.current = createChatProviderSafe(llm, log.child('llm'), workDir);
-      log.info(`llm: provider hot-reloaded (${llm.provider}, ${llm.model ?? 'default'})`);
+      // Async provider swap: the HTTP response does not wait for the SDK to
+      // spin up (optional deps may need a dynamic import).
+      void createChatProviderSafe(llm, log.child('llm'), workDir).then((provider) => {
+        providerRef.current = provider;
+        log.info(`llm: provider hot-reloaded (${llm.provider}, ${llm.model ?? 'default'})`);
+      });
     },
     createProvider: createChatProvider,
+  });
+  registerUsageRoutes(app, {
+    usage,
+    log: log.child('usage'),
   });
 
   const server = serve(
@@ -154,16 +183,31 @@ async function main(): Promise<void> {
         `listening on http://${info.address}:${info.port} ` +
           `(provider: ${cfg.llm.provider}, model: ${cfg.llm.model ?? 'default'}, concurrency: ${cfg.llm.concurrency})`,
       );
-      maybeOpenSetupBrowser(cfg.configDir, cfg.llm, log, port);
+      // Child mode (forked by the Electron app): never hijack the user's
+      // browser — the Agent UI owns first-run setup.
+      if (process.env.TOMI_AS_CHILD === '1') {
+        log.info('child mode (TOMI_AS_CHILD=1): no browser auto-open');
+      } else {
+        maybeOpenSetupBrowser(cfg.configDir, cfg.llm, log, port);
+      }
     },
   );
   ws.injectWebSocket(server);
 
   const shutdown = (): void => {
     log.info('shutting down...');
-    server.close(() => process.exit(0));
-    // Force-exit if sockets keep the loop alive.
-    setTimeout(() => process.exit(1), 3000).unref();
+    usage.dispose();
+    // Best-effort: hand pending days to the collector, capped so an offline
+    // machine never stalls shutdown. Closed days survive anyway and are
+    // re-sent on the next boot via flushStaleIfAny().
+    void Promise.race([
+      usage.flush(),
+      new Promise<void>((resolve) => setTimeout(resolve, 1200)),
+    ]).then(() => {
+      server.close(() => process.exit(0));
+      // Force-exit if sockets keep the loop alive.
+      setTimeout(() => process.exit(1), 3000).unref();
+    });
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

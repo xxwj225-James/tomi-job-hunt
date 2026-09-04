@@ -7,12 +7,18 @@
   "workspaces": [
     "core",
     "extension",
-    "hr"
+    "hr",
+    "app"
   ],
   "scripts": {
     "dev": "npm run dev -w core",
     "build": "npm run build -w core && npm run build -w extension",
-    "test": "npm test -w core && npm test -w extension"
+    "test": "npm test -w core && npm test -w extension",
+    "app:dev": "npm run dev -w app",
+    "pack": "node scripts/pack.mjs"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.0.12"
   },
   "engines": {
     "node": ">=20"

@@ -15,6 +15,11 @@ posture requires understanding what it is — and what it deliberately is not.
    *structured evaluations* produced by users — enum-based fact tags and
    sanitized notes. Raw JD text, HR names and contact details are excluded
    **by construction** (`buildSharedIntel` in `core/src/jd/sanitize.ts`).
+4. **A human-in-the-loop messenger.** TomiHunt **never sends a message
+   automatically**. AI-drafted pitches are filled into the chat box and
+   highlighted; the user reviews and sends them with their own Enter / click.
+   There is no code path that dispatches a message without the user's own
+   action (auto-send was removed in 2026 for this reason).
 
 ## What TomiHunt is not
 
@@ -34,7 +39,7 @@ for the accuracy and lawfulness of what they submit.
 
 | Safeguard | Where |
 |---|---|
-| Local-only processing, no telemetry | `core/src/index.ts` binds 127.0.0.1; `docs/privacy.md` |
+| Local-only processing; telemetry strictly opt-in & OFF by default | `core/src/index.ts` binds 127.0.0.1; `docs/privacy.md`, `docs/telemetry.md` |
 | PII masking (phones, emails, WeChat) | `core/src/jd/sanitize.ts` |
 | Abusive-language neutralization + 100-char clamp | `core/src/jd/sanitize.ts` |
 | Structured enum reports instead of free text | `core/src/jd/schema.ts` |

@@ -5,8 +5,10 @@ Thanks for your interest in contributing! 🎉
 ## Ground rules
 
 - **Privacy first.** This project's core value is that all user data stays on
-  the user's machine. Never add telemetry, external analytics, or code that
-  sends job/resume data anywhere other than the user's chosen LLM API.
+  the user's machine. Any telemetry must be strictly **opt-in, default OFF,
+  anonymous feature-count aggregates only** — see `core/src/usage/` and
+  [docs/telemetry.md](docs/telemetry.md). Never add code that sends
+  job/resume data anywhere other than the user's chosen LLM API.
 - **Compliance moat.** Anything shareable must pass through
   `core/src/jd/sanitize.ts` (`buildSharedIntel`) — raw JD text, HR names and
   contact details never leave the machine.

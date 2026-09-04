@@ -4,8 +4,9 @@
  * without the local Core service. Kept intentionally simple: same prompts,
  * same zod-free validation (manual shape checks).
  */
-import type { JdTags, ReplyResult, ReplyTurn } from '../types.js';
+import type { GreetingPoint, JdTags, ReplyResult, ReplyTurn } from '../types.js';
 import { directChat } from './llm.js';
+import { detectIndustry } from './industry.js';
 
 // --- JSON extraction (same algorithm as core/src/jd/tagger.ts) ---
 
@@ -88,14 +89,39 @@ export async function directGreeting(jd: {
   salaryText: string;
   requirements: string;
   hrName?: string;
-}, resume?: string, feedback?: string): Promise<{ pitch: string; warning?: string }> {
-  const resumePart = resume
-    ? `\n\n求职者简历（Markdown，以下内容是唯一可信的事实来源）：\n${resume.slice(0, 4000)}`
-    : '\n\n（求职者未配置简历——打招呼语中不得声称拥有任何具体技能、年限或经历，只能用通用真实的表达）';
+}, resume?: string, feedback?: string, points?: GreetingPoint[]): Promise<{ pitch: string; warning?: string }> {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const feedbackPart = feedback
     ? `\n\n用户对上一版打招呼语的修改意见（必须严格遵循）：\n${feedback.slice(0, 500)}`
     : '';
-  const prompt = `你是求职者的招聘沟通助手。请为以下岗位生成一条 Boss 直聘「打招呼语」。
+  const roleLine = ind
+    ? `你是深耕${ind}行业的资深猎头专家。请为以下岗位生成一条 Boss 直聘「打招呼语」。\n\n结合${ind}行业的人才需求特点与 HR 关注点，突出求职者与岗位最相关的亮点。`
+    : '你是求职者的招聘沟通助手。请为以下岗位生成一条 Boss 直聘「打招呼语」。';
+  // Two-stage: when Stage-1 matching points exist, the pitch is built ONLY from
+  // those curated, JD-aligned facts (no raw resume dump → the model can't
+  // re-anchor on an unrelated bullet). Otherwise fall back to the classic prompt.
+  const prompt = points && points.length > 0
+    ? buildGreetingFromPointsPrompt(jd, points, roleLine, feedbackPart)
+    : buildGreetingPrompt(jd, resume, roleLine, feedbackPart);
+  const result = await directChat([{ role: 'user', content: prompt }]);
+  return {
+    pitch: scrubUnsupportedYears(normalizePitch(result.text), resume),
+    warning: resume ? undefined : '未配置简历，已按 JD 通用生成（点插件图标 → 设置 → 粘贴简历，话术会更有针对性）',
+  };
+}
+
+/** Classic single-pass greeting prompt (fallback when no matching points).
+ *  Verbatim twin of core/src/jd/greeting.ts buildGreetingPrompt — keep in sync. */
+export function buildGreetingPrompt(jd: {
+  title: string;
+  company: string;
+  salaryText: string;
+  requirements: string;
+}, resume: string | undefined, roleLine: string, feedbackPart: string): string {
+  const resumePart = resume
+    ? `\n\n求职者简历（Markdown，以下内容是唯一可信的事实来源）：\n${resume.slice(0, 4000)}`
+    : '\n\n（求职者未配置简历——打招呼语中不得声称拥有任何具体技能、年限或经历，只能用通用真实的表达）';
+  return `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}
@@ -113,11 +139,100 @@ ${jd.requirements.slice(0, 4000) || '未提供'}${resumePart}
 5. 不提学历短板等减分项；不吹捧公司
 6. 结尾抛出具体问题或行动
 7. 只输出打招呼语本身，不要任何解释、标题或引号${feedbackPart}`;
-  const result = await directChat([{ role: 'user', content: prompt }]);
-  return {
-    pitch: scrubUnsupportedYears(normalizePitch(result.text), resume),
-    warning: resume ? undefined : '未配置简历，已按 JD 通用生成（点插件图标 → 设置 → 粘贴简历，话术会更有针对性）',
-  };
+}
+
+/** Stage-2 prompt when Stage-1 matching points exist — JD identity + points only,
+ *  no raw resume. Verbatim twin of core — keep in sync. */
+export function buildGreetingFromPointsPrompt(jd: {
+  title: string;
+  company: string;
+  salaryText: string;
+  requirements: string;
+}, points: GreetingPoint[], roleLine: string, feedbackPart: string): string {
+  const pointsPart = points
+    .slice(0, 4)
+    .map((p, i) => `${i + 1}. ${p.keyword}：${p.reframed}`)
+    .join('\n');
+  return `${roleLine}
+
+岗位：${jd.title}
+公司：${jd.company}
+薪资：${jd.salaryText || '未标注'}
+
+【已按 JD 定向提炼的匹配点】（基于求职者简历真实经历改写，以下内容是唯一可信的事实来源）：
+${pointsPart}
+
+要求：
+1. 长度 80~120 字，中文，口语化，像真人打招呼，不要书面腔
+2. 从上面的匹配点里挑 1~2 条展开；每条严格按给出的改写口径复述，不得添加匹配点里没有的经历、技能或数字
+3. 【绝对禁止编造】匹配点里没有的内容（技能、年限、项目、公司、具体数字）一律不得虚构。
+   JD 的硬性要求而匹配点里没有的：坦诚表达「有相关基础 / 正在积累」，宁可少说不虚构
+4. 不提学历短板等减分项；不吹捧公司
+5. 结尾抛出具体问题或行动
+6. 只输出打招呼语本身，不要任何解释、标题或引号${feedbackPart}`;
+}
+
+// --- Stage 1: JD-oriented matching points extraction ---
+
+/** Prompt for extracting JD-oriented matching points. Verbatim twin of core — keep in sync. */
+export function buildGreetingPointsPrompt(jd: {
+  title: string;
+  company: string;
+  requirements: string;
+}, resume: string, tags?: { techStack?: string[]; summary?: string } | null): string {
+  const stack = tags?.techStack?.length ? tags.techStack.join('、') : '（无）';
+  return `你是简历定向改写专家。根据目标 JD 的任职要求与关键词，从求职者简历里提炼「JD 定向匹配点」：把与 JD 相关的真实经历，按 JD 的领域口径改写为一句话。
+
+岗位：${jd.title}
+公司：${jd.company}
+任职要求：
+${jd.requirements.slice(0, 3000) || '未提供'}
+
+JD 关键词（techStack）：${stack}
+JD 摘要：${tags?.summary || '（无）'}
+
+求职者简历（Markdown，以下内容是唯一可信的事实来源）：
+${resume.slice(0, 6000)}
+
+改写要求：
+1. 只从简历真实内容里提炼匹配点；每项 = 一个 JD 关键词（keyword，用上面 techStack 或任职要求里的原词，小写英文）+ 一句话描述（reframed，≤40 字，描述该真实经历按 JD 口径的呈现方式）
+2. 关键词优先从 JD 的 techStack 里挑，其次任职要求；只挑简历里真实覆盖的 2~4 个，没覆盖的不硬凑
+3. 领域定向改写：复合型/软硬结合的经历按 JD 领域侧重重述（例如软硬结合项目投 IT 信息岗，突出数据、系统、接口、信息化改造等 IT 侧，弱化硬件/设备侧）；只能把简历里真实存在的部分换口径重述
+4. 【绝对禁止编造】公司/职位/项目名/技术栈/证书/学历/年限/量化数字一律以简历为准、原样保留；不得为贴近 JD 新增任何经历、技术或数字
+5. 只输出 JSON 对象，格式：{"points": [{"keyword": "sql", "reframed": "负责软硬件联调与数据信息管理，主导系统集成"}]}
+6. 简历里没有可匹配的真实经历就输出 {"points": []}
+7. 不要输出任何解释、标题或 markdown 代码块`;
+}
+
+/** Parse the Stage-1 points JSON; malformed output → [] (caller falls back to classic prompt). */
+export function parseGreetingPoints(text: string): GreetingPoint[] {
+  try {
+    const raw = parseJson<{ points?: unknown }>(text);
+    if (!Array.isArray(raw.points)) return [];
+    const points: GreetingPoint[] = [];
+    for (const item of raw.points) {
+      if (typeof item !== 'object' || item === null) continue;
+      const rec = item as Record<string, unknown>;
+      const keyword = String(rec.keyword ?? '').trim();
+      const reframed = String(rec.reframed ?? '').trim();
+      if (!keyword || !reframed) continue;
+      points.push({ keyword: keyword.slice(0, 30), reframed: reframed.slice(0, 40) });
+    }
+    return points.slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
+/** Stage 1 — extract JD-oriented matching points. Empty when no resume / no match / parse failure. */
+export async function directGreetingPoints(jd: {
+  title: string;
+  company: string;
+  requirements: string;
+}, resume: string | undefined, tags?: { techStack?: string[]; summary?: string } | null): Promise<GreetingPoint[]> {
+  if (!resume) return [];
+  const result = await directChat([{ role: 'user', content: buildGreetingPointsPrompt(jd, resume, tags) }]);
+  return parseGreetingPoints(result.text);
 }
 
 /**
@@ -175,10 +290,14 @@ export async function directMatch(jd: {
   salaryText: string;
   requirements: string;
 }, resume?: string): Promise<DirectMatchResult> {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历：按 JD 通用画像评估，strengths 留空，gaps 写岗位硬性要求）';
-  const prompt = `你是资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。
+  const roleLine = ind
+    ? `你是${ind}行业资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。\n\n结合${ind}行业的人才标准与业务特点评估「行业/业务契合度」。`
+    : '你是资深求职顾问。对比岗位 JD 与求职者简历，给出匹配度诊断。';
+  const prompt = `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}
@@ -217,6 +336,7 @@ export async function directReply(
   history: ReplyTurn[],
   incoming: string,
 ): Promise<ReplyResult> {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown 节选）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历，按通用求职者身份回复）';
@@ -227,7 +347,10 @@ export async function directReply(
           .map((t) => `${t.speaker === 'hr' ? '[对方]' : '[我]'} ${t.content.slice(0, 300)}`)
           .join('\n')}`
       : '\n\n（这是第一次对话）';
-  const prompt = `你是正在求职的候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。
+  const roleLine = ind
+    ? `你是正在求职的${ind}行业候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。\n\n按${ind}行业的职场表达习惯回复，体现专业与行业常识。`
+    : '你是正在求职的候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。';
+  const prompt = `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}
@@ -261,10 +384,14 @@ export async function directInterviewPrep(jd: {
   salaryText: string;
   requirements: string;
 }, resume?: string): Promise<{ questions: DirectInterviewQuestion[] }> {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历：题目按 JD 通用画像出）';
-  const prompt = `你是资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。
+  const roleLine = ind
+    ? `你是${ind}行业资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。\n\n结合${ind}行业的技术栈、业务场景与常见深挖点出题。`
+    : '你是资深面试官。针对目标岗位预测 5~10 道最可能被问到的面试题。';
+  const prompt = `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}

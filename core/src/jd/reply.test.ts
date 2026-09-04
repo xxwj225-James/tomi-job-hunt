@@ -31,4 +31,11 @@ describe('buildReplyPrompt', () => {
     expect(prompt).toContain('这是第一次对话');
     expect(prompt).toContain('未提供简历');
   });
+
+  it('injects the detected industry into the role line', () => {
+    const gameJd = { ...jd, title: '游戏运营', requirements: '手游活动策划，版本节奏' };
+    const prompt = buildReplyPrompt(gameJd, '# 简历\n- 游戏运营 3 年', [{ speaker: 'hr', content: '你好' }], '聊聊？');
+    expect(prompt).toContain('游戏行业候选人');
+    expect(prompt).toContain('按游戏行业的职场表达习惯');
+  });
 });

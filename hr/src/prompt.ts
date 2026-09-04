@@ -7,6 +7,7 @@
 import type { HrChatMessage } from './llm.js';
 import { chat } from './llm.js';
 import type { HrLlmConfig } from './llm.js';
+import { detectIndustry } from './industry.js';
 
 export interface HrMatchResult {
   score: number;
@@ -56,7 +57,11 @@ export interface HrJdLike {
 }
 
 export async function hrMatch(cfg: HrLlmConfig, jd: HrJdLike, resume: string): Promise<HrMatchResult> {
-  const prompt = `你是资深招聘顾问。对比岗位 JD 与候选人的简历，给出匹配度诊断，用 HR 视角判断是否邀约面试。
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume}`);
+  const roleLine = ind
+    ? `你是${ind}行业资深招聘顾问。对比岗位 JD 与候选人的简历，给出匹配度诊断，用${ind}行业的 HR 视角判断是否邀约面试。\n\n结合${ind}行业的人才供给、薪酬行情与常见风险点评估。`
+    : '你是资深招聘顾问。对比岗位 JD 与候选人的简历，给出匹配度诊断，用 HR 视角判断是否邀约面试。';
+  const prompt = `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}

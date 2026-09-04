@@ -14,6 +14,8 @@ export interface ResumeVersion {
   version: number;
   markdown: string;
   createdBy: 'tailor' | 'manual';
+  /** True when the tailored output passed the automated fact check (no fabricated facts). */
+  verified?: boolean;
   appliedAt?: string; // ISO when the user marked it as submitted
   note?: string;
 }

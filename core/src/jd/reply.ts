@@ -6,6 +6,7 @@
 import type { ChatProvider, ChatRequest } from '../types.js';
 import type { Logger } from '../logger.js';
 import type { MatchJd } from './match.js';
+import { detectIndustry } from './industry.js';
 
 export interface ReplyTurn {
   /** 'hr' = the other side, 'me' = the user. */
@@ -23,6 +24,7 @@ export function buildReplyPrompt(
   history: ReplyTurn[],
   incoming: string,
 ): string {
+  const ind = detectIndustry(`${jd.title} ${jd.requirements} ${resume ?? ''}`);
   const resumePart = resume
     ? `\n\n求职者简历（Markdown 节选）：\n${resume.slice(0, 4000)}`
     : '\n\n（求职者未提供简历，按通用求职者身份回复）';
@@ -33,7 +35,10 @@ export function buildReplyPrompt(
           .map((t) => `${t.speaker === 'hr' ? '[对方]' : '[我]'} ${t.content.slice(0, 300)}`)
           .join('\n')}`
       : '\n\n（这是第一次对话）';
-  return `你是正在求职的候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。
+  const roleLine = ind
+    ? `你是正在求职的${ind}行业候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。\n\n按${ind}行业的职场表达习惯回复，体现专业与行业常识。`
+    : '你是正在求职的候选人。对方（HR/猎头）刚发来一条消息，请帮「我」拟一条回复。';
+  return `${roleLine}
 
 岗位：${jd.title}
 公司：${jd.company}

@@ -16,6 +16,19 @@ describe('buildTailorPrompt', () => {
     expect(prompt).toContain('绝不编造');
     expect(prompt).toContain('只输出 Markdown 简历本身');
   });
+
+  it('forbids inventing facts (numbers/dates/companies/skills kept verbatim)', () => {
+    const prompt = buildTailorPrompt(jd, '# 简历\n- Java 5 年');
+    expect(prompt).toContain('原样保留，不得改动、不得新增');
+    expect(prompt).toContain('绝不为了匹配 JD 而编造或臆测');
+  });
+
+  it('injects the detected industry into the role line', () => {
+    const gameJd = { ...jd, title: '游戏数值策划', requirements: '手游经济系统设计' };
+    const prompt = buildTailorPrompt(gameJd, '# 简历\n- 游戏策划 3 年');
+    expect(prompt).toContain('游戏行业简历定制专家');
+    expect(prompt).toContain('按游戏行业的关键词');
+  });
 });
 
 describe('mdToHtml', () => {
@@ -28,6 +41,12 @@ describe('mdToHtml', () => {
     expect(html).toContain('<li>K8s</li>');
     expect(html).toContain('</ul>');
     expect(html).toContain('<p>三年经验。</p>');
+  });
+
+  it('renders inline **bold** and `code`', () => {
+    const html = mdToHtml('- **Java** 5年\n- 用过 `Redis`');
+    expect(html).toContain('<li><strong>Java</strong> 5年</li>');
+    expect(html).toContain('<li>用过 <code>Redis</code></li>');
   });
 
   it('escapes HTML in content', () => {

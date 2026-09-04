@@ -22,7 +22,6 @@ const modelHintEl = $<HTMLDivElement>('model-hint');
 const baseUrlHintEl = $<HTMLDivElement>('baseUrl-hint');
 const resumeEl = $<HTMLTextAreaElement>('resume');
 const resumeFileEl = $<HTMLInputElement>('resume-file');
-const sendModeEl = $<HTMLSelectElement>('sendMode');
 const smartReplyEl = $<HTMLSelectElement>('smartReply');
 const feedbackOptInEl = $<HTMLInputElement>('feedbackOptIn');
 const storageHintEl = $<HTMLDivElement>('storage-hint');
@@ -85,7 +84,7 @@ $('save').addEventListener('click', async () => {
   }
   await chrome.storage.local.set({
     'tomihunt-llm-config': cfg,
-    'tomihunt-send-mode': sendModeEl.value === 'auto' ? 'auto' : 'manual',
+    // send mode removed for compliance — the extension never auto-sends.
     'tomihunt-smart-reply': smartReplyEl.value === 'off' ? 'off' : 'on',
     'tomihunt-feedback-optin': feedbackOptInEl.checked,
   });
@@ -163,7 +162,6 @@ $('import-file').addEventListener('change', async () => {
       baseUrlEl.value = cfg.baseUrl ?? '';
     }
     if (typeof parsed['tomihunt-resume'] === 'string') resumeEl.value = parsed['tomihunt-resume'];
-    if (parsed['tomihunt-send-mode'] === 'auto') sendModeEl.value = 'auto';
     if (parsed['tomihunt-smart-reply'] === 'off') smartReplyEl.value = 'off';
     await chrome.storage.local.set(parsed);
     updateModelHint();
@@ -228,13 +226,10 @@ void loadDirectConfig().then((cfg) => {
   updateModelHint();
 });
 void chrome.storage.local
-  .get(['tomihunt-resume', 'tomihunt-send-mode', 'tomihunt-smart-reply', 'tomihunt-feedback-optin'])
+  .get(['tomihunt-resume', 'tomihunt-smart-reply', 'tomihunt-feedback-optin'])
   .then((data) => {
     if (typeof data['tomihunt-resume'] === 'string') {
       resumeEl.value = data['tomihunt-resume'] as string;
-    }
-    if (data['tomihunt-send-mode'] === 'auto') {
-      sendModeEl.value = 'auto';
     }
     if (data['tomihunt-smart-reply'] === 'off') {
       smartReplyEl.value = 'off';
