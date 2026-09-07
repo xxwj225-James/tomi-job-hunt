@@ -14,8 +14,20 @@
  *      .job-intro-container, .recruiter-container …) plus the legacy
  *      selectors from the pre-2026 build, so older pages still work.
  */
-import { captureAndShow, pickLongText, pickText, showPanel, watchChatForReplies } from './shared.js';
+import {
+  CHAT_INPUT_SELECTORS,
+  captureAndShow,
+  clickOpenChatButton,
+  enterAgentMode,
+  fillChatBox,
+  highlightChatInput,
+  pickLongText,
+  pickText,
+  showPanel,
+  watchChatForReplies,
+} from './shared.js';
 import type { JdCaptureInput } from '../types.js';
+import { computeJobUid, reportSession } from './agent-client.js';
 
 export interface LiepinJd {
   title: string;
@@ -138,12 +150,20 @@ export function extractLiepinJdDom(doc: Document): LiepinJd | null {
       '.job-detail .content',
       '.dd.noborder',
     ]) || '';
+  // The job's own recruiter card. Verified live 2026-09-07 against
+  // /a/77819271.shtml (陆女士) and /a/79453241.shtml (王先生): the name sits in
+  // `section.recruiter-container` (inside <main>) as span.name within a
+  // .name-box. Scope STRICTLY to that container — a page-wide `.recruiter-name`
+  // / `.head-hunter-name` also matches the sidebar related-jobs (.job-list)
+  // cards and the IM contact list, which used to capture a DIFFERENT
+  // recruiter's name (e.g. stored 柯女士 / 潘女士 while the card showed the
+  // real contact 王先生 / 陆女士).
   const hrName =
     pickText(doc, [
+      '.recruiter-container .name-box .name',
+      '.recruiter-container .name',
       '.recruiter-container .recruiter-name',
-      '.recruiter-name',
       '.job-recruiter .name',
-      '.head-hunter-name',
     ]) || '';
 
   return { title, company, salaryText, requirements, hrName };
@@ -201,6 +221,187 @@ export async function waitForJd(
   return null;
 }
 
+// --- Desktop Agent (headless tab-control): make this JD's chat reachable ---
+// Liepin chat has no separate route — it is an in-page overlay opened by the
+// 聊一聊 button on the job detail page (the address bar stays on /a/<id>.shtml).
+// Unlike zhipin (dedicated /web/geek/chat page with zhipin-chat.ts), there is
+// no chat-page content script to register a session, so we register here once
+// the JD identity is known. A session means "this JD's page tab is live"; on a
+// dispatch we open the chat overlay if needed and fill + highlight — the user
+// always presses send (compliance, same delivery as zhipin-chat).
+//
+// Dispatch protocol (extension/src/content/agent-client.ts):
+//   SW → content:  tomihunt-dispatch {requestId,targetId,text}
+//   content → SW:  tomi-ack {requestId,ok,error?,domSnippet?}
+
+function sameOriginFrameDocs(): Document[] {
+  const docs: Document[] = [];
+  for (const frame of document.querySelectorAll<HTMLIFrameElement>('iframe')) {
+    try {
+      // Same-origin only — cross-origin access throws and is skipped.
+      const inner = frame.contentDocument;
+      if (inner) docs.push(inner);
+    } catch {
+      /* cross-origin frame — cannot fill inside */
+    }
+  }
+  return docs;
+}
+
+/** Recruiter-name token as the site renders it (王先生 / 柯女士 / HR老师). */
+const RECRUITER_NAME_RE = /^[一-龥·]{1,6}(?:女士|先生|老师)$/;
+
+/** Topmost ancestor of the chat input that still belongs to the chat overlay
+ *  (hints: fixed/absolute layer or im-/chat-/dialog class family). The name
+ *  header sits inside this layer, so scanning it can't leak a recruiter card
+ *  that lives elsewhere on the detail page. Falls back to the input's parent. */
+function chatPanelRoot(input: Element, doc: Document): Element {
+  let out: Element | null = null;
+  let node: Element | null = input.parentElement;
+  while (node && node !== doc.body) {
+    const cls = typeof node.className === 'string' ? node.className : '';
+    const pos = getComputedStyle(node).position;
+    if (
+      pos === 'fixed' ||
+      pos === 'absolute' ||
+      /(^|[\s_-])(im-chat|chat-(panel|window|wrap|box|container|main|dialog)|im-dialog|im-window|dialog|conversation|message-panel)([\s_-]|$)/i.test(
+        cls,
+      )
+    ) {
+      out = node;
+    }
+    node = node.parentElement;
+  }
+  return out ?? input.parentElement ?? input;
+}
+
+/** True when the element or an ancestor is hidden by inline styles. */
+function isInlineHidden(el: Element): boolean {
+  for (let n: Element | null = el; n && n.nodeType === 1; n = n.parentElement) {
+    const s = (n as HTMLElement).style;
+    if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return true;
+  }
+  return false;
+}
+
+/**
+ * Reads the CURRENT chat counterpart (the person this chat actually talks to)
+ * from the open liepin overlay — the captured hrName can lag behind because a
+ * posting may rotate which recruiter a view is matched with, so the page at
+ * fill time is the source of truth. Scoped to the overlay's panel so a
+ * different recruiter's name in the detail-page DOM never leaks in. Returns
+ * undefined when no clean name token is found (caller keeps the stored name).
+ */
+export function readChatCounterpart(doc: Document = document): string | undefined {
+  const input = doc.querySelector<HTMLElement>(CHAT_INPUT_SELECTORS.join(','));
+  if (!input) return undefined;
+  const root = chatPanelRoot(input, doc);
+  for (const el of root.querySelectorAll<HTMLElement>('div, span, a, p, li, h1, h2, h3, strong, em')) {
+    if (el === input || input.contains(el) || el.contains(input)) continue;
+    if (isInlineHidden(el)) continue;
+    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length < 2 || text.length > 12) continue;
+    if (!RECRUITER_NAME_RE.test(text)) continue;
+    return text; // first bare-name leaf in document order = the overlay header
+  }
+  return undefined;
+}
+
+function readLiveRecruiter(): string | undefined {
+  for (const doc of [document, ...sameOriginFrameDocs()]) {
+    const name = readChatCounterpart(doc);
+    if (name) return name;
+  }
+  return undefined;
+}
+
+/**
+ * Fills the chat input of the liepin overlay if reachable. Order: top-level
+ * document → same-origin iframe (the overlay may render inside one) → open the
+ * chat via 聊一聊 then retry. Fills + highlights only, never auto-sends.
+ * On success also reads the live counterpart from the open overlay so the
+ * desktop App can show the real person instead of a stale captured name.
+ */
+export async function fillLiepinChat(
+  text: string,
+): Promise<{ ok: boolean; error?: string; domSnippet?: string; recruiter?: string }> {
+  const tryDocs = async (): Promise<boolean> => {
+    for (const doc of [document, ...sameOriginFrameDocs()]) {
+      if (fillChatBox(text, CHAT_INPUT_SELECTORS, doc)) return true;
+    }
+    return false;
+  };
+
+  if (await tryDocs()) {
+    highlightChatInput();
+    return { ok: true, domSnippet: '已填入聊天框并高亮，请确认后在页面发送', recruiter: readLiveRecruiter() };
+  }
+
+  if (!clickOpenChatButton()) {
+    return { ok: false, error: '未找到聊天输入框，页面上也没有「聊一聊 / 沟通」按钮' };
+  }
+
+  // The chat overlay opens async — poll for the input like fillPitch does.
+  for (let i = 0; i < 6; i += 1) {
+    await new Promise((r) => setTimeout(r, 800));
+    if (await tryDocs()) {
+      highlightChatInput();
+      return { ok: true, domSnippet: '已打开聊天窗口并填入，请确认后在页面发送', recruiter: readLiveRecruiter() };
+    }
+  }
+  return { ok: false, error: '已打开聊天窗口，但未找到聊天输入框' };
+}
+
+/** Desktop-Agent dispatch entry on liepin pages (mirrors installAgentClient). */
+export function installLiepinAgentClient(): void {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg || typeof msg !== 'object') return undefined;
+    const d = msg as { type?: string; requestId?: unknown; text?: unknown };
+    if (d.type !== 'tomihunt-dispatch' || typeof d.requestId !== 'string' || typeof d.text !== 'string') {
+      return undefined;
+    }
+    // The desktop Agent is now driving this page — enter agent mode so the
+    // in-page floating widget (import/tagging tick + tagged completion +
+    // smart reply) never (re)appears over the chat overlay for the rest of
+    // this page session. A one-shot hidePanel() was NOT enough: capture ticks
+    // and tagging events land AFTER the dispatch and used to re-create the
+    // panel. Captures keep going to core silently.
+    enterAgentMode();
+    void fillLiepinChat(d.text).then(({ ok, error, domSnippet, recruiter }) => {
+      void chrome.runtime
+        .sendMessage({
+          type: 'tomi-ack',
+          requestId: d.requestId,
+          ok,
+          ...(ok ? { domSnippet } : {}),
+          ...(ok && recruiter ? { recruiter } : {}),
+          ...(error ? { error } : {}),
+        })
+        .catch(() => undefined);
+    });
+    return undefined;
+  });
+}
+
+/**
+ * Registers a gateway session for the JD on this page and keeps it in sync:
+ * re-upsert when the background SW wakes (tomi-session-sync), remove on leave.
+ * targetId = `jd:<uid>` where uid = sha256(trim(company)|trim(title)) — the same
+ * uid core computes for the captured record, so the desktop Agent links them.
+ */
+export async function registerChatSession(jd: LiepinJd): Promise<void> {
+  installLiepinAgentClient();
+  const targetId = `jd:${await computeJobUid(jd.company, jd.title)}`;
+  void reportSession('upsert', targetId);
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && typeof msg === 'object' && (msg as { type?: string }).type === 'tomi-session-sync') {
+      void reportSession('upsert', targetId);
+    }
+    return undefined;
+  });
+  window.addEventListener('pagehide', () => void reportSession('remove', targetId), { once: true });
+}
+
 async function main(): Promise<void> {
   // HR 端页面（猎聘 HR 端候选人简历页）由 hr-liepin 处理，求职者分析不应触发。
   // TODO(platform): 待真实 HR 端 URL 确定后填入路径片段，当前空列表无行为影响。
@@ -210,6 +411,9 @@ async function main(): Promise<void> {
   watchChatForReplies();
   const jd = await waitForJd(document);
   if (!jd) return;
+
+  // Make this JD's page tab reachable by the desktop Agent (session + fill).
+  await registerChatSession(jd);
 
   const ctx = { jd: toInput(jd) };
   captureAndShow(ctx, `猎聘 · ${jd.title}`).catch(() => {

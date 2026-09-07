@@ -38,7 +38,11 @@ extension **fills the chat box and highlights it — it never sends
 automatically** (compliance): on the chat page (zhipin navigates to
 /web/geek/chat; liepin opens its chat panel) you review the pitch and press
 Enter / click send yourself. The desktop App (headless agent) delivers
-messages the same way: fill + highlight, your confirm, then send.
+messages the same way: fill + highlight, your confirm, then send. On liepin,
+an open JD detail page counts as an online target — when the App sends a fill
+command, the page's content script opens the chat overlay via 聊一聊 if it
+isn't open yet, then fills + highlights (it never sends automatically on
+either site).
 
 ## Resume upload (direct mode)
 

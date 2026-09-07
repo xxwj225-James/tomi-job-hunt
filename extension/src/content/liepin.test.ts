@@ -14,14 +14,14 @@ describe('extractLiepinJd', () => {
         <div class="job-item-title">18-25K</div>
         <div class="company-info"><div class="name">某互联网公司</div></div>
         <div class="job-description">负责小程序与 H5 开发，要求 React 三年以上经验</div>
-        <div class="recruiter-name">李顾问</div>
+        <section class="recruiter-container"><div class="content"><div class="name-box"><span class="name">李女士</span></div></div></section>
       </body></html>`);
     const jd = extractLiepinJd(doc);
     expect(jd?.title).toBe('前端工程师');
     expect(jd?.company).toBe('某互联网公司');
     expect(jd?.salaryText).toBe('18-25K');
     expect(jd?.requirements).toContain('React');
-    expect(jd?.hrName).toBe('李顾问');
+    expect(jd?.hrName).toBe('李女士');
   });
 
   it('returns null when essentials are missing', () => {

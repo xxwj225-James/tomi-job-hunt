@@ -132,4 +132,81 @@ describe('observeChatMessages', () => {
     expect(received).toEqual(['方便的话，明天下午面试可以吗？']);
     stop();
   });
+
+  it('never guesses on UNMARKED history already on screen (page reload mid-chat)', async () => {
+    // Chat with our own past message BEFORE the observer attaches — liepin
+    // renders every bubble without a side marker, so on a reload this used to
+    // fire a spurious "incoming" for OUR OWN old message.
+    const chat = document.createElement('div');
+    const own = document.createElement('div');
+    own.className = 'chat-message'; // no side marker — could be mine
+    own.textContent = '您好，我之前主动投递了这个岗位';
+    chat.appendChild(own);
+    document.body.appendChild(chat);
+
+    const received: string[] = [];
+    const stop = observeChatMessages((text) => received.push(text));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(received).toEqual([]); // unmarked backlog must not fire
+    stop();
+  });
+
+  it('fires for history the markup clearly marks as the other side', async () => {
+    const chat = document.createElement('div');
+    const theirs = document.createElement('div');
+    theirs.className = 'chat-message from'; // positive "other side" marker
+    theirs.textContent = '方便的话加个微信？';
+    chat.appendChild(theirs);
+    const own = document.createElement('div');
+    own.className = 'chat-message self'; // clearly mine — never fires
+    own.textContent = '好的，我的微信号是 xxx';
+    chat.appendChild(own);
+    document.body.appendChild(chat);
+
+    const received: string[] = [];
+    const stop = observeChatMessages((text) => received.push(text));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(received).toEqual(['方便的话加个微信？']);
+    stop();
+  });
+
+  it('treats a delayed echo of our fill as outgoing, even >90s after the fill (Agent review gap)', async () => {
+    vi.useFakeTimers();
+    try {
+      // The Agent fills a pitch; the user reviews it in the desktop app for a
+      // couple of minutes, THEN presses send in the browser. The echo arrives
+      // long past the old 90s window — it must still not be "incoming".
+      document.body.innerHTML = '<textarea class="chat-input"></textarea>';
+      const filled = fillChatBox('您好，想和您确认一下面试时间的安排', ['textarea.chat-input']);
+      expect(filled).toBe(true);
+      vi.advanceTimersByTime(2 * 60_000);
+
+      const received: string[] = [];
+      const stop = observeChatMessages((text) => received.push(text));
+
+      const chat = document.createElement('div');
+      document.body.appendChild(chat);
+      const echo = document.createElement('div');
+      echo.className = 'chat-message'; // no side marker — liepin
+      echo.textContent = '您好，想和您确认一下面试时间的安排';
+      chat.appendChild(echo);
+      // Control: an unrelated unmarked NEW message must still fire — this
+      // proves the observer is live and only the echo was suppressed.
+      // (Appended as its own node: the observer scans each added node.)
+      const real = document.createElement('div');
+      real.className = 'chat-message';
+      real.textContent = '请问您目前还在职吗？';
+      chat.appendChild(real);
+
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      // Both the suppressed echo and the control are UNMARKED bubbles, so each
+      // is held ~250ms to give a just-cleared send time to register as outgoing
+      // before firing (see observeChatMessages / trackChatInputSends).
+      vi.advanceTimersByTime(400);
+      expect(received).toEqual(['请问您目前还在职吗？']);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

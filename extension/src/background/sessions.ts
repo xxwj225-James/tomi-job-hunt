@@ -118,6 +118,7 @@ export function installMessageListener(): void {
       ok?: boolean;
       error?: string;
       domSnippet?: string;
+      recruiter?: string;
     };
     const tabId = sender.tab?.id;
 
@@ -139,6 +140,7 @@ export function installMessageListener(): void {
         ok: m.ok !== false,
         error: m.error,
         domSnippet: m.domSnippet,
+        ...(typeof m.recruiter === 'string' && m.recruiter ? { recruiter: m.recruiter } : {}),
       });
     }
     return undefined;

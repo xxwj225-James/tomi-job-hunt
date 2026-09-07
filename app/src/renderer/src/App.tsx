@@ -157,7 +157,12 @@ export default function App(): JSX.Element {
     const outcome = await gw.send(targetId, text);
     unsubPending();
     if (outcome.kind === 'ok') {
-      setSendState(jd.jobUid, { state: 'ok', domSnippet: outcome.domSnippet, at: Date.now() });
+      setSendState(jd.jobUid, {
+        state: 'ok',
+        domSnippet: outcome.domSnippet,
+        recruiter: outcome.recruiter,
+        at: Date.now(),
+      });
     } else if (outcome.kind === 'failed') {
       setSendState(jd.jobUid, { state: 'failed', reason: outcome.reason, at: Date.now() });
     } else {

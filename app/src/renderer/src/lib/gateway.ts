@@ -82,6 +82,7 @@ export class GatewayClient {
             kind: msg.ok === false ? 'error' : 'ok',
             ...(msg.error !== undefined ? { error: String(msg.error) } : {}),
             ...(msg.domSnippet !== undefined ? { domSnippet: String(msg.domSnippet) } : {}),
+            ...(msg.recruiter !== undefined ? { recruiter: String(msg.recruiter) } : {}),
           });
         }
       } else if (msg.type === 'failed') {

@@ -116,6 +116,67 @@ describe('extractLiepinJd on the real (2026) page structure', () => {
   });
 });
 
+// Real recruiter-card structure, verified live 2026-09-07:
+//   - the job's own contact = section.recruiter-container > .content > .name-box > span.name
+//     (/a/77819271.shtml → 陆女士, /a/79453241.shtml → 王先生)
+//   - unrelated `.recruiter-name` nodes live in the sidebar related-jobs (.job-list)
+//     and the IM contact list — placed BEFORE <main> here as the worst case, since
+//     the old page-wide `.recruiter-name` grab used to return one of THEM.
+describe('extractLiepinJd — hrName comes from the job-owner recruiter card only', () => {
+  it('ignores sidebar .job-list recruiter-name and IM-modal contacts that precede <main>', () => {
+    const doc = docFrom(`
+      <html><body>
+        <div class="ant-im-modal"><div class="ant-im-modal-body">
+          <div class="im-ui-chat-container"><div class="im-ui-contact-title"><span class="im-ui-contact-title-name">潘女士</span></div></div>
+        </div></div>
+        <div class="job-list">
+          <div class="job-list-item"><div class="job-card-pc-container"><div class="job-card-right-box">
+            <div class="recruiter-info-box"><div class="recruiter-info-text-box"><div class="recruiter-name">柯女士</div></div></div>
+          </div></div></div>
+        </div>
+        <main>
+          <div class="job-apply-content"><div class="name-box"><span class="name">交付负责人</span><span class="salary">30-50k</span></div></div>
+          <span class="company-name">某上海大型人工智能公司</span>
+          <div class="job-intro-container">负责大模型交付项目管理，五年以上经验</div>
+          <section class="recruiter-container"><div class="content"><div class="name-box"><span class="name">王先生</span></div></div></section>
+        </main>
+      </body></html>`);
+    const jd = extractLiepinJd(doc);
+    expect(jd).not.toBeNull();
+    expect(jd!.hrName).toBe('王先生');
+  });
+
+  it('supports the legacy recruiter-container markup where the name is .recruiter-name', () => {
+    const doc = docFrom(`
+      <html><body>
+        <main>
+          <div class="job-apply-content"><div class="name-box"><span class="name">高级项目总监</span></div></div>
+          <span class="company-name">某上海科技推广服务公司</span>
+          <div class="job-intro-container">负责项目交付与客户对接，八年以上经验</div>
+          <section class="recruiter-container"><div class="recruiter-name">陆女士</div></section>
+        </main>
+      </body></html>`);
+    const jd = extractLiepinJd(doc);
+    expect(jd).not.toBeNull();
+    expect(jd!.hrName).toBe('陆女士');
+  });
+
+  it('leaves hrName empty when only unrelated .recruiter-name nodes exist (no job-owner card)', () => {
+    const doc = docFrom(`
+      <html><body>
+        <div class="job-list"><div class="job-list-item"><div class="recruiter-name">柯女士</div></div></div>
+        <main>
+          <div class="job-apply-content"><div class="name-box"><span class="name">交付负责人</span></div></div>
+          <span class="company-name">某公司</span>
+          <div class="job-intro-container">职责：项目交付</div>
+        </main>
+      </body></html>`);
+    const jd = extractLiepinJd(doc);
+    expect(jd).not.toBeNull();
+    expect(jd!.hrName).toBe('');
+  });
+});
+
 describe('waitForJd', () => {
   it('resolves on the real (2026) structure once present', async () => {
     const dom = new JSDOM(`<html><body></body></html>`);

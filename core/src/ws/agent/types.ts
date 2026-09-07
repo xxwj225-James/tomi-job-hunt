@@ -25,6 +25,8 @@ export type AgentToGateway =
       error?: string;
       /** Small DOM context on success, so the console can show "what happened". */
       domSnippet?: string;
+      /** Live chat counterpart read from the page at fill time (liepin). */
+      recruiter?: string;
     };
 
 /** Agent UI (console) → gateway. */
@@ -47,6 +49,7 @@ export type GatewayToConsole =
       ok: boolean;
       error?: string;
       domSnippet?: string;
+      recruiter?: string;
     }
   | { type: 'failed'; requestId: string; reason: FailedReason };
 

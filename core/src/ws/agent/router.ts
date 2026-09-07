@@ -139,6 +139,7 @@ export class AgentRouter {
             ok: msg.ok,
             error: msg.error,
             domSnippet: msg.domSnippet,
+            ...(msg.recruiter !== undefined ? { recruiter: msg.recruiter } : {}),
           });
         }
         break;

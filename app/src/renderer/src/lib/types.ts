@@ -193,7 +193,7 @@ export interface SessionInfo {
 export type FailedReason = 'tab-closed' | 'tab-idle' | 'selector-failed' | 'tab-offline';
 
 export type SendOutcome =
-  | { kind: 'ok'; domSnippet?: string }
+  | { kind: 'ok'; domSnippet?: string; recruiter?: string }
   | { kind: 'failed'; reason: FailedReason }
   | { kind: 'error'; error: string };
 
@@ -203,5 +203,7 @@ export interface SendState {
   note?: string;
   reason?: FailedReason;
   domSnippet?: string;
+  /** Live chat counterpart read from the page at fill time (overrides stale hrName). */
+  recruiter?: string;
   at: number;
 }

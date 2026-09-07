@@ -21,7 +21,15 @@ export interface DispatchMsg {
 
 type GatewayToAgent = DispatchMsg | { type: 'pong'; ts: number };
 
-export type AckBody = { type: 'ack'; requestId: string; ok: boolean; error?: string; domSnippet?: string };
+export type AckBody = {
+  type: 'ack';
+  requestId: string;
+  ok: boolean;
+  error?: string;
+  domSnippet?: string;
+  /** Live chat counterpart read from the page at fill time (liepin). */
+  recruiter?: string;
+};
 
 type Listener = (msg: GatewayToAgent) => void;
 type OpenHandler = () => void;

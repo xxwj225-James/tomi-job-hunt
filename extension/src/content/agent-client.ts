@@ -13,7 +13,7 @@
  *                  tomi-session {action,targetId}
  *                  tomi-session-sync-reply {targetId}
  */
-import { fillAndSendAgent } from './shared.js';
+import { enterAgentMode, fillAndSendAgent } from './shared.js';
 
 interface DispatchPayload {
   type: 'tomihunt-dispatch';
@@ -30,6 +30,11 @@ export function installAgentClient(): void {
     if (d.type !== 'tomihunt-dispatch' || typeof d.requestId !== 'string' || typeof d.text !== 'string') {
       return undefined;
     }
+    // The desktop Agent now drives this page: suppress the in-page floating
+    // widget (import/tagging + smart reply) for the rest of this page session,
+    // so it can't re-appear over the chat while the Agent fills or the user
+    // sends. Captures keep going to core silently.
+    enterAgentMode();
     const { ok, error } = fillAndSendAgent(d.text);
     void chrome.runtime
       .sendMessage({

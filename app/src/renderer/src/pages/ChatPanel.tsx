@@ -22,6 +22,13 @@ interface Bubble {
 const pitchCache = new Map<string, string>();
 const bubbleCache = new Map<string, Bubble[]>();
 
+/** What the user must open in the browser before a fill can land (per source). */
+function openPageHint(jd: JdRecord): string {
+  return jd.source === 'liepin'
+    ? '打开该 JD 的猎聘详情页（聊天浮层会自动弹出）'
+    : '打开该岗位的 Boss 直聘聊天窗口';
+}
+
 export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: Props): JSX.Element {
   const uid = jd.jobUid;
   const [pitch, setPitch] = useState(() => pitchCache.get(uid) ?? '');
@@ -39,6 +46,11 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
   }, [uid, pitch]);
 
   const sessionOn = session?.status === 'online';
+
+  // After a successful fill the page tells us who the chat is actually with —
+  // a posting can rotate recruiters, so the live counterpart overrides the
+  // (possibly stale) hrName snapshot stored at capture time.
+  const liveRecruiter = sendState?.state === 'ok' && sendState.recruiter ? sendState.recruiter : undefined;
 
   async function generate(feedback?: string): Promise<void> {
     setGenerating(true);
@@ -89,14 +101,29 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
         <div>
           <div className="who">
             {jd.company}
-            {jd.hrName ? <span className="chip t" style={{ marginLeft: 6 }}>{jd.hrName}</span> : null}
+            {liveRecruiter || jd.hrName ? (
+              <span
+                className="chip t"
+                style={{ marginLeft: 6, ...(liveRecruiter ? { color: '#188038', fontWeight: 600 } : {}) }}
+                title={
+                  liveRecruiter
+                    ? `页面实时联系人：${liveRecruiter}（填入聊天框时从页面读取）`
+                    : `采集时记录的联系人：${jd.hrName}`
+                }
+              >
+                {liveRecruiter ?? jd.hrName}
+              </span>
+            ) : null}
             <span className="chip" style={{ marginLeft: 4 }}>{jd.title}</span>
           </div>
           <div className="meta">
             {SOURCE_LABEL[jd.source]} · 采集于 {new Date(jd.capturedAt).toLocaleString('zh-CN', { hour12: false })}
           </div>
         </div>
-        <span className={`st${sessionOn ? '' : ' off'}`}>
+        <span
+          className={`st${sessionOn ? '' : ' off'}`}
+          title={sessionOn ? '页面在线，可填入聊天框' : `离线：请先在浏览器${openPageHint(jd)}`}
+        >
           {sessionOn ? '● 聊天窗口在线' : '聊天窗口离线'}
         </span>
       </div>
@@ -158,14 +185,16 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
             sendState.state === 'ok' ? 'ok' : sendState.state === 'failed' ? 'err' : 'wait'
           }`}
         >
-          {sendState.state === 'ok' ? `已填入浏览器聊天框并高亮，请在浏览器中确认后发送（插件不会自动发送）。${sendState.domSnippet ? '（' + sendState.domSnippet + '）' : ''}` : ''}
-          {sendState.state === 'pending' ? '⏳ 目标聊天页当前离线——插件正在唤醒，消息已在网关缓冲（约 30s）。' : ''}
+          {sendState.state === 'ok' ? `${sendState.recruiter ? `正在与 ${sendState.recruiter} 沟通。` : ''}已填入浏览器聊天框并高亮，请在浏览器中确认后发送（插件不会自动发送）。${sendState.domSnippet ? '（' + sendState.domSnippet + '）' : ''}` : ''}
+          {sendState.state === 'pending' ? '⏳ 目标页面当前离线，消息已缓冲（约 30s）：请现在到浏览器打开对应页面，会自动填入；超时则失败。' : ''}
           {sendState.state === 'failed' ? `填入失败：${sendState.reason ? REASON_LABEL[sendState.reason] : sendState.note ?? '未知原因'}` : ''}
         </div>
       ) : null}
 
       <div className="send-note">
-        需要 Chrome/Edge 打开该 JD 的聊天窗口并加载插件，才可真实送达；失败原因（页面关闭 / 离线 / 选择器失效）会回显在这里。
+        {sessionOn
+          ? '填入后请到浏览器确认内容再发送（插件不会自动发送）。失败原因（页面关闭 / 离线 / 选择器失效）会回显在这里。'
+          : `该 JD 当前离线：请先在浏览器${openPageHint(jd)}，再点「填入聊天框」；消息会缓冲约 30s，期间页面打开即自动填入。`}
       </div>
     </div>
   );

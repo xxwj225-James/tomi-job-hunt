@@ -111,9 +111,9 @@ export function pickLongText(doc: Document, selectors: string[]): string {
  * beforeinput/input so React state syncs. Textarea fallback kept for edge
  * layouts and the native-setter trick for React-controlled textareas.
  */
-export function fillChatBox(text: string, selectors: string[]): boolean {
+export function fillChatBox(text: string, selectors: string[], doc: Document = document): boolean {
   for (const sel of selectors) {
-    const el = document.querySelector<HTMLElement>(sel);
+    const el = doc.querySelector<HTMLElement>(sel);
     if (!el) continue;
     if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
       const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -126,8 +126,9 @@ export function fillChatBox(text: string, selectors: string[]): boolean {
     } else {
       // contenteditable div
       el.textContent = text;
-      const selection = window.getSelection();
-      const range = document.createRange();
+      const docWin = doc.defaultView ?? window;
+      const selection = docWin.getSelection();
+      const range = doc.createRange();
       range.selectNodeContents(el);
       range.collapse(false);
       selection?.removeAllRanges();
@@ -161,34 +162,42 @@ const MSG_SELECTORS = [
  *  - flex auto-margins: `margin-left:auto` pushes MY bubble to the right,
  *    `margin-right:auto` pushes the OTHER side's bubble to the left
  *  - `align-self:flex-end` (column chat lists right-align my bubble)
- * Falls back to 'not mine' so ambiguous messages reach the echo guard below.
+ * Returns 'mine' / 'theirs' / 'unknown' — a bubble with NO marker at all is
+ * 'unknown', NOT 'theirs', so page-load scans never guess on an unmarked
+ * backlog (that used to fire a spurious reply on our OWN past messages, which
+ * liepin renders without any side marker).
  * (Inline-style fallback keeps jsdom tests green — getComputedStyle there
  * returns '' for styles that real browsers compute.)
  */
-function isMyMessage(el: Element): boolean {
+type MessageSide = 'mine' | 'theirs' | 'unknown';
+
+function classifySide(el: Element): MessageSide {
   const cls = typeof el.className === 'string' ? el.className : '';
-  if (/(^|[ _-])(self|right|mine|me)([ _-]|$)/i.test(cls)) return true;
-  if (/(^|[ _-])(left|from|other)([ _-]|$)/i.test(cls)) return false;
+  if (/(^|[ _-])(self|right|mine|me)([ _-]|$)/i.test(cls)) return 'mine';
+  if (/(^|[ _-])(left|from|other)([ _-]|$)/i.test(cls)) return 'theirs';
   const computed = getComputedStyle(el);
   const inline = (el as HTMLElement).style;
   const textAlign = computed.textAlign || inline.textAlign;
   const cssFloat = computed.cssFloat || inline.cssFloat;
-  if (cssFloat === 'right' || textAlign === 'right') return true;
+  if (cssFloat === 'right' || textAlign === 'right') return 'mine';
   const ml = computed.marginLeft || inline.marginLeft;
   const mr = computed.marginRight || inline.marginRight;
-  if (ml === 'auto' && mr !== 'auto') return true;
-  if (mr === 'auto' && ml !== 'auto') return false;
+  if (ml === 'auto' && mr !== 'auto') return 'mine';
+  if (mr === 'auto' && ml !== 'auto') return 'theirs';
   const alignSelf = computed.alignSelf || inline.alignSelf;
-  if (alignSelf === 'flex-end' || alignSelf === 'end') return true;
-  if (alignSelf === 'flex-start' || alignSelf === 'start') return false;
-  return false;
+  if (alignSelf === 'flex-end' || alignSelf === 'end') return 'mine';
+  if (alignSelf === 'flex-start' || alignSelf === 'start') return 'theirs';
+  return 'unknown';
 }
 
 // Texts the extension itself filled into / sent from the chat box. Echoes of
 // these in the DOM are OUR messages (they get classified as theirs only when
 // the site's markup carries no side marker, e.g. liepin) — never incoming HR
-// messages, so they must not trigger a reply.
-const OUTGOING_WINDOW_MS = 90_000;
+// messages, so they must not trigger a reply. The window is long on purpose:
+// an Agent-driven fill lands in the box but the user may press send in the
+// browser MINUTES later (they review the pitch in the desktop app first), so
+// the outgoing echo can appear well after the fill.
+const OUTGOING_WINDOW_MS = 30 * 60_000;
 const recentOutgoing: Array<{ text: string; ts: number }> = [];
 
 function rememberOutgoing(text: string): void {
@@ -216,6 +225,13 @@ function isRecentOutgoing(text: string): boolean {
     // splits long messages). A ≥4-char fragment that lives inside our sent
     // text is ours, never incoming HR content.
     if (t.length >= 4 && r.text.includes(t)) return true;
+    // The observer may match a container node whose textContent bundles MORE
+    // than the bubble — sender name / time around our message (e.g. liepin's
+    // "王先生 09:12 <我们的消息>"). Our full sent text then sits inside t, so
+    // suppress it too. A real incoming HR message never embeds a 4+-char run
+    // of what WE just sent (both sides gated so a short "好的" send can't
+    // blanket-suppress an HR message that happens to start with it).
+    if (t.length >= 4 && r.text.length >= 4 && t.includes(r.text)) return true;
     return false;
   });
 }
@@ -224,29 +240,55 @@ function isRecentOutgoing(text: string): boolean {
  * Watches the chat area for NEW incoming messages (from the other side).
  * Dedupes by content; fires onIncoming(text) once per new message.
  * Returns a stop function.
+ *
+ * Messages already in the DOM when we attach fire ONLY on a positive "theirs"
+ * signal — an unmarked backlog (e.g. our own history on liepin, which has no
+ * side marker) must never be guessed at, or every page load mid-conversation
+ * would draft a reply to our own previous message.
  */
+/**
+ * A NEW bubble with NO side marker (liepin's default markup) is ambiguous: it
+ * can be an incoming HR message, or an echo of what the USER just sent (hand-
+ * typed, or an Agent fill the user edited). Sending clears the chat box and
+ * trackChatInputSends records the sent text as outgoing — but that record can
+ * land a moment AFTER the echo appends. So an unmarked bubble is held briefly
+ * and re-checked against the outgoing set before it can fire a reply.
+ */
+const UNMARKED_CONFIRM_MS = 250;
+
 export function observeChatMessages(onIncoming: (text: string) => void): () => void {
   const seen = new Set<string>();
-  const consider = (el: Element): void => {
+  const consider = (el: Element, allowUnknown: boolean): void => {
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (text.length < 2) return;
     if (seen.has(text)) return;
     if (isRecentOutgoing(text)) return; // an echo of what we just sent/filled
-    if (isMyMessage(el)) return; // my own messages never trigger replies
+    const side = classifySide(el);
+    if (side === 'mine') return; // my own messages never trigger replies
+    if (!allowUnknown && side !== 'theirs') return; // ambiguous backlog — never guess
     seen.add(text);
+    if (side === 'unknown') {
+      setTimeout(() => {
+        if (isRecentOutgoing(text)) return; // it was OUR sent echo — never a reply
+        onIncoming(text);
+      }, UNMARKED_CONFIRM_MS);
+      return;
+    }
     onIncoming(text);
   };
-  // Existing messages first (page load mid-conversation)
+  // Existing messages first (page load mid-conversation) — only the ones the
+  // markup/layout clearly marks as the other side.
   for (const sel of MSG_SELECTORS) {
-    for (const el of document.querySelectorAll(sel)) consider(el);
+    for (const el of document.querySelectorAll(sel)) consider(el, false);
   }
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (!(node instanceof HTMLElement)) continue;
-        const el = node.matches(MSG_SELECTORS.join(',')) ? node : node.querySelector(MSG_SELECTORS.join(','));
-        if (el) consider(el);
-        if (node.matches(MSG_SELECTORS.join(','))) consider(node);
+        const el = node.matches(MSG_SELECTORS.join(','))
+          ? node
+          : node.querySelector(MSG_SELECTORS.join(','));
+        if (el) consider(el, true);
       }
     }
   });
@@ -282,6 +324,29 @@ const replyHistory: Array<{ speaker: 'hr' | 'me'; content: string }> = [];
 let lastReplyAt = 0;
 const REPLY_COOLDOWN_MS = 10_000;
 
+/**
+ * True once the desktop Agent has taken over this page (see enterAgentMode).
+ * Every panel flow — the capture/tagging per-second tick, tagged completion,
+ * smart reply, errors — funnels through showPanel, so one guard there keeps the
+ * in-page floating widget away for the rest of this page session once the Agent
+ * is the active UI. Resets naturally on navigation/reload (the content script
+ * re-runs). A one-shot hidePanel() is NOT enough: the tagging tick / a tagged
+ * event can land AFTER a dispatch and would otherwise re-create the host.
+ */
+let agentMode = false;
+
+/**
+ * The desktop Agent is now driving this page: drop any floating widget and
+ * never let it reappear until the page is reloaded. Backend captures keep going
+ * to the local service silently — only the on-page UI is suppressed. Also stops
+ * the smart reply auto-draft, which would otherwise overwrite the very chat box
+ * the Agent is using.
+ */
+export function enterAgentMode(): void {
+  agentMode = true;
+  hidePanel();
+}
+
 async function smartReplyEnabled(): Promise<boolean> {
   try {
     const data = await chrome.storage.local.get('tomihunt-smart-reply');
@@ -296,6 +361,7 @@ async function smartReplyEnabled(): Promise<boolean> {
  * history) and fills it into the chat box — the user always sends it.
  */
 export async function handleIncomingMessage(text: string): Promise<void> {
+  if (agentMode) return; // the Agent drives this page — no auto drafts/fills
   if (!(await smartReplyEnabled())) return;
   const now = Date.now();
   if (now - lastReplyAt < REPLY_COOLDOWN_MS) return;
@@ -330,8 +396,64 @@ export async function handleIncomingMessage(text: string): Promise<void> {
   }
 }
 
+/**
+ * Records text the USER sends from the chat box into the same recentOutgoing
+ * set that already suppresses echoes of extension-filled messages. Needed
+ * because a message typed by hand (or an Agent fill the user edited before
+ * sending) is never recorded by fillChatBox — yet on liepin it echoes back with
+ * no side marker and the observer can't tell it from an incoming HR message.
+ *
+ * Signals that a send happened, without depending on the site's DOM markers:
+ *  - Enter keydown in the input (textarea/contenteditable) while NOT composing
+ *    IME — Enter sends on these IM sites; record the draft before the echo can
+ *    be observed. (IME composition Enter is guarded so Chinese input confirm
+ *    steps don't count as sends.)
+ *  - the input being emptied by an 'input' event after holding text — sending
+ *    clears the box (button sends).
+ */
+export function trackChatInputSends(doc: Document = document): () => void {
+  const isChatInput = (t: EventTarget | null): t is HTMLElement =>
+    t instanceof HTMLElement && t.matches(CHAT_INPUT_SELECTORS.join(','));
+  const textOf = (el: HTMLElement): string =>
+    (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement ? el.value : (el.textContent ?? ''))
+      .replace(/\s+/g, ' ')
+      .trim();
+  const lastText = new WeakMap<Element, string>();
+  const record = (el: HTMLElement): void => {
+    const t = textOf(el);
+    if (t.length >= 2) rememberOutgoing(t);
+  };
+  // Existing chat inputs: snapshot so a later clear can be compared to what was
+  // in the box before the send.
+  for (const el of doc.querySelectorAll<HTMLElement>(CHAT_INPUT_SELECTORS.join(','))) {
+    lastText.set(el, textOf(el));
+  }
+  const onInput = (ev: Event): void => {
+    if (!isChatInput(ev.target)) return;
+    const el = ev.target as HTMLElement;
+    const prev = lastText.get(el);
+    const cur = textOf(el);
+    if (prev && prev.length >= 2 && cur.length === 0) rememberOutgoing(prev); // box cleared = sent
+    lastText.set(el, cur);
+  };
+  const onKeydown = (ev: KeyboardEvent): void => {
+    if (ev.isComposing || ev.keyCode === 229) return; // IME composition — not a send
+    if (ev.key !== 'Enter' || ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (t.tagName === 'TEXTAREA' || t.isContentEditable) record(t);
+  };
+  doc.addEventListener('input', onInput, true);
+  doc.addEventListener('keydown', onKeydown, true);
+  return () => {
+    doc.removeEventListener('input', onInput, true);
+    doc.removeEventListener('keydown', onKeydown, true);
+  };
+}
+
 /** Wires the observer on chat-capable pages. */
 export function watchChatForReplies(): void {
+  trackChatInputSends(); // recognize OUR sends even when the site marks nothing
   observeChatMessages((text) => {
     void handleIncomingMessage(text);
   });
@@ -458,6 +580,7 @@ export function showPanel(content: {
   /** Renders a 👍/👎 feedback bar; submissions persist to `tomihunt-feedback`. */
   feedback?: { feature: string };
 }): void {
+  if (agentMode) return; // the desktop Agent is driving this page — no widget
   const rows = content.rows.map((r) => `<div class="row">${escapeHtml(r)}</div>`).join('');
   const tagsHtml = content.tags
     ? `<div class="tags">${escapeHtml(formatTags(content.tags))}</div>`
@@ -842,7 +965,7 @@ export type SendMode = 'manual';
 
 // Chat-box selector chain: zhipin (contenteditable + textarea variants) and
 // liepin candidates + generic fallbacks. Order matters — first hit wins.
-const CHAT_INPUT_SELECTORS = [
+export const CHAT_INPUT_SELECTORS = [
   '#chat-input.chat-input[contenteditable="true"]',
   '.chat-input[contenteditable="true"]',
   '.chat-input',
