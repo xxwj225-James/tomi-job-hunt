@@ -89,18 +89,25 @@ export class CoreClient {
     return (await resp.json()) as { ok: boolean; provider: string; queue: { active: number; pending: number } };
   }
 
-  async captureJd(jd: JdCaptureInput): Promise<{ jobUid: string; taggingJobId: string }> {
+  /**
+   * Stores a JD. By default Core tags it asynchronously and broadcasts jd/tagged
+   * over WS (returns taggingJobId). With `{ tag: false }` it is a silent 库
+   * import only — no LLM tagging, no WS events (used by the BOSS SPA browse
+   * controller so merely viewing a job deposits it into the JD library for free).
+   */
+  async captureJd(jd: JdCaptureInput, opts?: { tag?: boolean }): Promise<{ jobUid: string; taggingJobId?: string }> {
     const base = await this.base();
     const resp = await fetch(`${base}/v1/jd/capture`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(jd),
+      // tag is a transport flag only — Core's schema strips it before persist.
+      body: JSON.stringify(opts?.tag === false ? { ...jd, tag: false } : jd),
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as { error?: string };
       throw new Error(body.error ?? `capture failed: ${resp.status}`);
     }
-    return (await resp.json()) as { jobUid: string; taggingJobId: string };
+    return (await resp.json()) as { jobUid: string; taggingJobId?: string };
   }
 
   async greeting(req: GreetingRequest): Promise<GreetingResult> {

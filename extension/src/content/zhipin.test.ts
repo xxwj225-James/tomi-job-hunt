@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { extractZhipinJdDom, hasDetailMarker, jidFromUrl, parseWapiDetail } from './zhipin.js';
+import {
+  attachZhipinSpaWatcher,
+  extractZhipinJdDom,
+  hasDetailMarker,
+  jidFromUrl,
+  parseWapiDetail,
+  type ZhipinJd,
+} from './zhipin.js';
 
 function docFrom(html: string): Document {
   return new JSDOM(html).window.document;
@@ -111,5 +119,130 @@ describe('extractZhipinJdDom', () => {
   it('returns null when title or company is missing', () => {
     const doc = docFrom(`<html><body><div class="job-salary">20K</div></body></html>`);
     expect(extractZhipinJdDom(doc)).toBeNull();
+  });
+});
+
+describe('attachZhipinSpaWatcher', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  // A BOSS SPA "opened detail" view (in-page, URL unchanged).
+  function jobDetail(title: string, company: string, salary = '20-30K'): string {
+    return `
+      <div class="job-detail-box">
+        <div class="job-detail-header">
+          <span class="job-name">${title}</span>
+          <span class="job-salary">${salary}</span>
+          <span class="job-company-name">${company}</span>
+        </div>
+        <div class="job-detail"><div class="job-sec-text">负责 ${title} 相关研发。</div></div>
+      </div>`;
+  }
+
+  it('commits a stably-viewed job exactly once (2 consecutive ticks, no repeat)', async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = jobDetail('后端工程师', '甲厂');
+      const imported: string[] = [];
+      const silentImport = vi.fn(async (jd: ZhipinJd) => {
+        imported.push(`${jd.company}|${jd.title}`);
+      });
+      const renderPanel = vi.fn();
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel });
+
+      // 1st tick already ran synchronously → candidate seen once, NOT committed
+      expect(silentImport).not.toHaveBeenCalled();
+      expect(renderPanel).not.toHaveBeenCalled();
+
+      // 2nd consecutive tick → adopt: silent import + panel render
+      await vi.advanceTimersByTimeAsync(100);
+      expect(imported).toEqual(['甲厂|后端工程师']);
+      expect(silentImport).toHaveBeenCalledTimes(1);
+      expect(renderPanel).toHaveBeenCalledTimes(1);
+
+      // staying on the same job keeps re-ticking but never re-imports/re-renders
+      await vi.advanceTimersByTimeAsync(500);
+      expect(silentImport).toHaveBeenCalledTimes(1);
+      expect(renderPanel).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores transient SPA flicker (A→B→A never commits because it never gets 2 consecutive ticks)', async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = jobDetail('岗位A', '甲厂'); // 1st tick: A × 1
+      const silentImport = vi.fn(async () => {});
+      const renderPanel = vi.fn();
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel });
+
+      // 2nd tick sees B → candidate resets (B × 1) — A never commits
+      document.body.innerHTML = jobDetail('岗位B', '乙厂');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(silentImport).not.toHaveBeenCalled();
+      expect(renderPanel).not.toHaveBeenCalled();
+
+      // 3rd tick sees A again → resets once more (A × 1) — still not consecutive
+      document.body.innerHTML = jobDetail('岗位A', '甲厂');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(silentImport).not.toHaveBeenCalled();
+      expect(renderPanel).not.toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('imports each newly-stable job; revisiting an imported job only re-renders the panel', async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = jobDetail('岗位A', '甲厂');
+      const imported: string[] = [];
+      const silentImport = vi.fn(async (jd: ZhipinJd) => {
+        imported.push(jd.title);
+      });
+      const renderPanel = vi.fn();
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel });
+
+      await vi.advanceTimersByTimeAsync(100); // adopt A
+      expect(imported).toEqual(['岗位A']);
+      expect(renderPanel).toHaveBeenCalledTimes(1);
+
+      // switch to B → committed after its own 2 ticks
+      document.body.innerHTML = jobDetail('岗位B', '乙厂');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(imported).toEqual(['岗位A', '岗位B']);
+      expect(renderPanel).toHaveBeenCalledTimes(2);
+
+      // back to A: fresh view (re-render), but NOT re-imported this session
+      document.body.innerHTML = jobDetail('岗位A', '甲厂');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(imported).toEqual(['岗位A', '岗位B']);
+      expect(renderPanel).toHaveBeenCalledTimes(3);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never imports on pure list pages (no detail marker)', async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = '<div class="job-list-box"><div class="job-name">后端工程师</div></div>';
+      const silentImport = vi.fn(async () => {});
+      const renderPanel = vi.fn();
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel });
+      await vi.advanceTimersByTimeAsync(400);
+      expect(silentImport).not.toHaveBeenCalled();
+      expect(renderPanel).not.toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

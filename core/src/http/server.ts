@@ -239,6 +239,9 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
 
   app.post('/v1/jd/capture', async (c) => {
     const body = await c.req.json().catch(() => null);
+    // `tag` is a transport flag (default true → tag) read from the RAW body:
+    // the zod schema strips unknown keys, so it never reaches the stored record.
+    const tag = (body as { tag?: unknown } | null)?.tag !== false;
     const parsed = jdCaptureInputSchema.safeParse(body);
     if (!parsed.success) {
       const detail = parsed.error.issues.map((i) => i.message).join('; ');
@@ -247,6 +250,19 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     const input = parsed.data;
     const jobUid = computeJobUid(input.company, input.title);
     const record: JdRecord = { ...input, jobUid, capturedAt: new Date().toISOString() };
+
+    // Silent 库 import (tag:false — BOSS SPA browsing deposits the viewed JD).
+    // Store WITHOUT tagging and return: no queue job, no WS events, no LLM cost.
+    // Skip the append when a richer tagged record for this jobUid already exists
+    // so jds.jsonl doesn't grow on repeated browse-imports of one job. The
+    // tag:true path below stays byte-identical to the pre-change behavior.
+    if (!tag) {
+      if (!deps.store.findByUid(jobUid)?.tags) deps.store.save(record);
+      deps.usage.count('jd_capture');
+      deps.log.info(`jd: captured (untagged import) ${jobUid} (${input.company} — ${input.title})`);
+      return c.json({ jobUid }, 200);
+    }
+
     deps.store.save(record);
     deps.usage.count('jd_capture');
     deps.log.info(`jd: captured ${jobUid} (${input.company} — ${input.title})`);

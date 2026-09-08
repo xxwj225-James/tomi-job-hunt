@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { _resetCoreBaseCache, getCoreBase } from './core-client.js';
+import { CoreClient, _resetCoreBaseCache, getCoreBase } from './core-client.js';
 
 function mockChrome(stored: unknown = undefined): void {
   const store = new Map<string, unknown>();
@@ -73,5 +73,55 @@ describe('getCoreBase (port auto-discovery)', () => {
     const base = await getCoreBase();
     expect(base).toBe('http://127.0.0.1:34570');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('CoreClient.captureJd', () => {
+  const jd = {
+    source: 'zhipin' as const,
+    url: 'https://www.zhipin.com/job_detail/a.html',
+    title: '后端工程师',
+    company: '甲厂',
+    salaryText: '20-30K',
+    requirements: '写 Java',
+  };
+
+  function stubCapture(): { bodies: unknown[] } {
+    const bodies: unknown[] = [];
+    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return { ok: true, status: 202, json: async () => ({ jobUid: 'uid-1', taggingJobId: 'job-1' }) } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return { bodies };
+  }
+
+  it('sends tag:false in the body only when explicitly requested', async () => {
+    mockChrome({ base: 'http://127.0.0.1:34570', at: Date.now() });
+    const { bodies } = stubCapture();
+    const client = new CoreClient();
+
+    await client.captureJd(jd, { tag: false }); // silent 库 import (SPA browse)
+    expect(bodies[0]).toEqual({ ...jd, tag: false });
+
+    await client.captureJd(jd); // default → normal tag flow, no transport flag
+    expect(bodies[1]).not.toHaveProperty('tag');
+    expect(bodies[1]).toEqual(jd);
+  });
+
+  it('ignores tag:true opts (only tag === false switches to silent import)', async () => {
+    mockChrome({ base: 'http://127.0.0.1:34570', at: Date.now() });
+    const { bodies } = stubCapture();
+    const client = new CoreClient();
+    await client.captureJd(jd, { tag: true });
+    expect(bodies[0]).toEqual(jd); // no tag key leaked to the wire
+  });
+
+  it('returns jobUid + taggingJobId from the 202 response', async () => {
+    mockChrome({ base: 'http://127.0.0.1:34570', at: Date.now() });
+    stubCapture();
+    const client = new CoreClient();
+    const res = await client.captureJd(jd);
+    expect(res).toEqual({ jobUid: 'uid-1', taggingJobId: 'job-1' });
   });
 });

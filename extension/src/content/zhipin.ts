@@ -9,7 +9,16 @@
  *   2. DOM fallback with current selectors (`.job-detail-header .job-name` …)
  *      plus legacy candidates; hidden interference words stripped in shared.ts
  */
-import { captureAndShow, pickLongText, pickText, showPanel } from './shared.js';
+import {
+  captureAndShow,
+  client,
+  enterJobView,
+  generatePitch,
+  pickLongText,
+  pickText,
+  showMatch,
+  showPanel,
+} from './shared.js';
 import type { JdCaptureInput } from '../types.js';
 
 export interface ZhipinJd {
@@ -203,6 +212,157 @@ export function hasDetailMarker(doc: Document): boolean {
   );
 }
 
+/**
+ * BOSS SPA watcher — keeps the floating panel pinned to the job CURRENTLY
+ * viewed and silently deposits each viewed job into the local JD library.
+ *
+ * On list/home/company pages a JD detail opens in-page (no URL change). When a
+ * NEW job is stably shown it:
+ *   1. bumps the shared view epoch (enterJobView) so any still-running analysis
+ *      of an EARLIER job stops painting over this view — Core still finishes it
+ *      in the background, so that job's 库 record gets its tags, no panel pops;
+ *   2. silently imports the DOM-only JD into Core with tag:false → zero LLM;
+ *   3. re-renders the floating panel for the new job.
+ * Zero BOSS-network traffic here: extraction is DOM-only and the import goes to
+ * the local Core service. The guarded wapi detail fetch happens only when the
+ * user explicitly clicks 分析此岗位 (rate-limited + session-cached as before).
+ * Every panel action re-extracts the job on screen AT CLICK TIME, so an action
+ * can never analyze a job other than the one being viewed.
+ */
+export interface ZhipinSpaWatcherOptions {
+  /** Poll cadence in ms (default 2000). */
+  pollMs?: number;
+  /** Injectable for tests — defaults to a silent tag:false Core capture. */
+  silentImport?: (jd: ZhipinJd) => Promise<void>;
+  /** Injectable for tests — defaults to the current-job floating panel. */
+  renderPanel?: (jd: ZhipinJd) => void;
+}
+
+/** Default silent import: DOM-only JD → POST /v1/jd/capture with tag:false. */
+async function defaultSilentImport(jd: ZhipinJd): Promise<void> {
+  await client.captureJd(toInput(jd), { tag: false });
+}
+
+export function attachZhipinSpaWatcher(opts: ZhipinSpaWatcherOptions = {}): () => void {
+  const pollMs = opts.pollMs ?? 2000;
+  const silentImport = opts.silentImport ?? defaultSilentImport;
+
+  // Keys already imported this content-script session (avoid re-POSTing).
+  const imported = new Set<string>();
+  // A job whose silent import has not succeeded yet (Core may have been off).
+  let pendingImport: { key: string; jd: ZhipinJd; attempts: number } | null = null;
+  // The currently adopted job — what the panel describes.
+  let adoptedKey: string | null = null;
+  // 2-consecutive-tick stability: transient SPA flicker / skeletons never commit.
+  let candidateKey: string | null = null;
+  let candidateStreak = 0;
+
+  const extractLive = (): ZhipinJd | null => extractZhipinJdDomOnly(document);
+
+  const keyOf = (jd: ZhipinJd): string => jidFromDom(document) ?? `${jd.title}|${jd.company}`;
+
+  /** Silent, retry-while-on-screen import into the JD library (no LLM). */
+  const attemptImport = async (): Promise<void> => {
+    const p = pendingImport;
+    if (!p) return;
+    try {
+      await silentImport(p.jd);
+      imported.add(p.key);
+      pendingImport = null;
+    } catch {
+      p.attempts += 1;
+      if (p.attempts >= 3) pendingImport = null; // give up; revisiting the job retries
+    }
+  };
+
+  const adopt = async (jd: ZhipinJd): Promise<void> => {
+    const key = keyOf(jd);
+    const isSame = key === adoptedKey;
+    adoptedKey = key;
+    if (!isSame) {
+      // Supersede any in-flight analysis of the previously-viewed job: its
+      // ticks/sockets are disposed and its completions never paint here.
+      enterJobView();
+    }
+    if (!imported.has(key) && !(pendingImport && pendingImport.key === key)) {
+      pendingImport = { key, jd, attempts: 0 };
+      void attemptImport();
+    }
+    if (!isSame) (opts.renderPanel ?? defaultRender)(jd);
+  };
+
+  // Runs `task` against the job on screen AT CLICK TIME, adopting it first if
+  // the user switched jobs since this panel was rendered — an action can never
+  // score a job that is no longer being viewed.
+  const runOnLive =
+    (task: (live: ZhipinJd) => void | Promise<void>): (() => void) =>
+    () => {
+      void (async () => {
+        const live = extractLive();
+        if (!live) return;
+        await adopt(live);
+        await task(live);
+      })();
+    };
+
+  const analyzeLive = async (live: ZhipinJd): Promise<void> => {
+    // Guarded detail fetch (plaintext salary / clean JD; rate-limited, session-
+    // cached, disabled after a risk-control challenge) — the ONLY Boss API call.
+    const enriched = (await extractZhipinJdGuarded(document, true)) ?? live;
+    await captureAndShow({ jd: toInput(enriched) }, `Boss直聘 · ${enriched.title}`);
+  };
+
+  const defaultRender = (jd: ZhipinJd): void => {
+    showPanel({
+      title: `TomiHunt · ${jd.title}`,
+      rows: [
+        `岗位：${jd.title} @ ${jd.company}`,
+        jd.salaryText ? `薪资：${jd.salaryText}` : '',
+        '已自动存入本地 JD 库。AI 分析只在点击时对当前岗位执行，不消耗额度。',
+      ],
+      actions: [
+        { label: '🤖 分析此岗位', primary: true, onClick: runOnLive(analyzeLive) },
+        {
+          label: '匹配度打分',
+          onClick: runOnLive((live) => showMatch({ jd: toInput(live) }, `Boss直聘 · ${live.title}`)),
+        },
+        {
+          label: '生成打招呼语',
+          onClick: runOnLive((live) => generatePitch({ jd: toInput(live) }, `Boss直聘 · ${live.title}`)),
+        },
+      ],
+    });
+  };
+
+  const tick = async (): Promise<void> => {
+    if (!hasDetailMarker(document)) {
+      // no detail open (list / home / company landing) — forget a half-seen job
+      candidateKey = null;
+      candidateStreak = 0;
+      return;
+    }
+    const jd = extractLive();
+    if (!jd) return;
+    const key = keyOf(jd);
+    if (key === candidateKey) {
+      candidateStreak += 1;
+    } else {
+      candidateKey = key;
+      candidateStreak = 1;
+    }
+    if (candidateStreak < 2) return; // not shown stably yet
+    if (key === adoptedKey) {
+      void attemptImport(); // Core may be back up — finish a pending import
+      return;
+    }
+    await adopt(jd);
+  };
+
+  const timer = setInterval(() => void tick(), pollMs);
+  void tick();
+  return () => clearInterval(timer);
+}
+
 async function main(): Promise<void> {
   // HR 端页面（Boss直聘 HR 端候选人简历页）由 hr-zhipin 处理，求职者分析不应触发。
   // TODO(platform): 待真实 HR 端 URL 确定后填入路径片段（如 '/web/boss/'），当前空列表无行为影响。
@@ -220,43 +380,11 @@ async function main(): Promise<void> {
 
   // SPA surfaces (导航职位列表 /web/geek/jobs、首页直开的 JD、公司招聘页
   // gongsi/job/*): a JD detail opens in the same page WITHOUT a URL change.
-  // SAFEST DESIGN: the DOM watch is zero-network — it only detects the
-  // opened detail and offers a 分析此岗位 button. The API fetch happens
-  // ONLY when the user clicks (one request per JD, rate-limited + cached).
-  let activeKey: string | null = null;
-  const poll = async (): Promise<void> => {
-    if (!hasDetailMarker(document)) return; // no detail open (list / home)
-    const domJd = extractZhipinJdDomOnly(document);
-    if (!domJd) return;
-    const key = `${domJd.title}|${domJd.company}`;
-    if (key === activeKey) return; // same JD still on screen — nothing to do
-    activeKey = key;
-    const ctx = { jd: toInput(domJd) };
-    showPanel({
-      title: 'TomiHunt',
-      rows: [`检测到岗位：${domJd.title} @ ${domJd.company}`, domJd.salaryText ? `薪资：${domJd.salaryText}` : ''],
-      actions: [
-        {
-          label: '🤖 分析此岗位',
-          onClick: () => {
-            void (async () => {
-              const jd = await extractZhipinJdGuarded(document, true);
-              ctx.jd = toInput(jd);
-              await captureAndShow(ctx, `Boss直聘 · ${jd.title}`);
-            })();
-          },
-          primary: true,
-        },
-      ],
-    });
-  };
-  let ticks = 0;
-  const timer = setInterval(() => {
-    ticks += 1;
-    if (ticks > 200) clearInterval(timer); // ~10 min lifetime
-    void poll();
-  }, 3000);
-  void poll();
+  // The controller (DOM-only + zero BOSS-network) auto-imports each newly
+  // viewed job into the local JD 库 with tag:false, pins the floating panel to
+  // the CURRENT job, and runs LLM only when the user clicks an action. The
+  // guarded wapi detail fetch still happens only on an explicit 分析 click.
+  attachZhipinSpaWatcher();
 }
 
 // Auto-run only in the real browser (not in vitest/jsdom imports).

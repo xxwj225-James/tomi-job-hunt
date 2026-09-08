@@ -753,6 +753,34 @@ async function addToBoard(ctx: CapturedContext, panelTitle: string): Promise<voi
   }
 }
 
+// --- Panel "view epoch" guard (SPA JD switches without a URL change) ---
+// Boss直聘's list/home/company pages open JD details in-place. The floating
+// panel must always describe the job CURRENTLY viewed, so every async capture
+// flow (import ticks, WS jd/tagged completion, direct-mode tagging, and the
+// match/pitch/interview LLM calls) records the epoch when it starts and stops
+// painting once a NEWER job view supersedes it — a slow old job's result can
+// never paint over the job on screen. The single active-capture slot also lets
+// enterJobView() dispose the previous capture's setInterval + WebSocket, which
+// fixes a socket leak when SPA captures stack up (client.watch opened a fresh
+// WebSocket per call and callers never closed it).
+let viewEpoch = 0;
+let activeCapture: { epoch: number; dispose: () => void } | null = null;
+
+/** The currently displayed JD changed — superseded analyses must stop painting. */
+export function enterJobView(): number {
+  viewEpoch += 1;
+  if (activeCapture) {
+    activeCapture.dispose();
+    activeCapture = null;
+  }
+  return viewEpoch;
+}
+
+/** True when `epoch` still describes the currently-viewed job. */
+function isViewCurrent(epoch: number): boolean {
+  return epoch === viewEpoch;
+}
+
 /** Identity of the JD the last completed analysis belongs to. */
 let lastCapturedKey: string | null = null;
 
@@ -768,27 +796,58 @@ export async function captureAndShow(
   panelTitle: string,
   force = false,
 ): Promise<void> {
+  // Epoch of the job view this capture belongs to. captureAndShow does NOT bump
+  // the epoch itself — the BOSS SPA controller calls enterJobView() whenever the
+  // displayed job changes. On single-JD pages (job_detail URLs, liepin) nothing
+  // ever bumps, so the guards below are no-ops there and behavior is unchanged.
+  const epoch = viewEpoch;
   // Cached analysis: navigating back reuses the tags. Identity is CONTENT-
   // based (title|company), not URL — Boss直聘's jobs page is an SPA where
   // switching JDs keeps the URL unchanged. 重新导入 (force) always re-runs.
   if (!force && ctx.tags && jdKey(ctx.jd) === lastCapturedKey) {
+    if (!isViewCurrent(epoch)) return;
     showTaggedPanel(ctx, panelTitle);
     return;
   }
   await saveLastJd(ctx.jd);
+  if (!isViewCurrent(epoch)) return; // switched jobs while we saved — don't spend tokens
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在导入并分析 JD…'] });
   const backend = await detectBackend();
+  if (!isViewCurrent(epoch)) return; // switched during backend probe — never capture
 
   if (backend === 'core') {
     try {
+      if (!isViewCurrent(epoch)) return;
       const { jobUid, taggingJobId } = await client.captureJd(ctx.jd);
       ctx.jobUid = jobUid;
       // Show the JD summary immediately + a ticking wait time, so the wait
       // never feels stuck (claude-code engine takes 30-60s; API providers 2-5s).
       const startedAt = Date.now();
       let settled = false;
+      let disposed = false;
+      let timer: ReturnType<typeof setInterval> | undefined;
+      let closer: (() => void) | undefined;
+      // Closes the tick interval + WebSocket exactly once (on settle or on
+      // supersede) — the watch socket used to leak because nothing closed it.
+      const dispose = (): void => {
+        if (disposed) return;
+        disposed = true;
+        if (timer) {
+          clearInterval(timer);
+          timer = undefined;
+        }
+        try {
+          closer?.();
+        } catch {
+          // socket already gone
+        }
+        if (activeCapture?.epoch === epoch) activeCapture = null;
+      };
       const tick = (): void => {
-        if (settled) return;
+        if (settled || !isViewCurrent(epoch)) {
+          dispose(); // superseded — stop ticking, never paint an old job
+          return;
+        }
         const elapsed = Math.round((Date.now() - startedAt) / 1000);
         showPanel({
           state: 'tagging',
@@ -803,27 +862,36 @@ export async function captureAndShow(
           ].filter(Boolean),
         });
       };
+      // Claim the active slot BEFORE the socket opens so a job switch during
+      // the open supersedes this capture and closes the socket once it lands.
+      if (activeCapture && activeCapture.epoch !== epoch) {
+        activeCapture.dispose();
+        activeCapture = null;
+      }
+      if (!activeCapture) activeCapture = { epoch, dispose };
       tick();
-      const timer = setInterval(tick, 1000);
-      client.watch((event) => {
-        if (event.type === 'jd/tagged' && event.jobId === taggingJobId) {
-          settled = true;
-          clearInterval(timer);
-          ctx.tags = event.tags;
-          if (event.tags) {
-            lastCapturedKey = jdKey(ctx.jd);
-            showTaggedPanel(ctx, panelTitle);
-          } else {
-            showPanel({
-              state: 'error',
-              title: panelTitle,
-              rows: [],
-              error: `标签化失败: ${event.error ?? '未知错误'}`,
-            });
-          }
+      timer = setInterval(tick, 1000);
+      closer = await client.watch((event) => {
+        if (event.type !== 'jd/tagged' || event.jobId !== taggingJobId) return;
+        settled = true;
+        dispose(); // settle → close the socket (no leak)
+        if (!isViewCurrent(epoch)) return; // core tagged an OLD job — stay silent
+        ctx.tags = event.tags;
+        if (event.tags) {
+          lastCapturedKey = jdKey(ctx.jd);
+          showTaggedPanel(ctx, panelTitle);
+        } else {
+          showPanel({
+            state: 'error',
+            title: panelTitle,
+            rows: [],
+            error: `标签化失败: ${event.error ?? '未知错误'}`,
+          });
         }
       });
+      if (disposed) closer(); // superseded while the socket was opening
     } catch (err) {
+      if (!isViewCurrent(epoch)) return; // superseded errors stay silent
       if (isContextInvalidated(err)) {
         contextInvalidatedPanel(panelTitle);
         return;
@@ -842,10 +910,12 @@ export async function captureAndShow(
   // Direct mode — no local service needed, LLM called from the extension
   try {
     const tags = await backendTag(ctx.jd);
+    if (!isViewCurrent(epoch)) return; // an old job's direct tag stays silent
     ctx.tags = tags;
     lastCapturedKey = jdKey(ctx.jd);
     showTaggedPanel(ctx, panelTitle);
   } catch (err) {
+    if (!isViewCurrent(epoch)) return;
     if (isContextInvalidated(err)) {
       contextInvalidatedPanel(panelTitle);
       return;
@@ -870,6 +940,8 @@ export async function generatePitch(
   panelTitle: string,
   feedback?: string,
 ): Promise<void> {
+  const epoch = viewEpoch; // a pitch for a job the user already left stays silent
+  if (!isViewCurrent(epoch)) return;
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在生成打招呼语…'] });
   try {
     // Prompt adaptation: merge the user's accumulated thumbs/tags/notes
@@ -895,6 +967,7 @@ export async function generatePitch(
     // user sees the reframing and can eyeball that nothing was fabricated.
     const pointRows = (result.points ?? []).slice(0, 3).map((p) => `✅ 匹配点 · ${p.keyword}：${p.reframed}`);
     const rows = [...pointRows, ...(result.warning ? [result.warning] : [])];
+    if (!isViewCurrent(epoch)) return; // switched jobs while the LLM ran — no stale paint
     showPanel({
       title: panelTitle,
       rows,
@@ -907,6 +980,7 @@ export async function generatePitch(
       ],
     });
   } catch (err) {
+    if (!isViewCurrent(epoch)) return; // superseded errors stay silent
     if (isContextInvalidated(err)) {
       contextInvalidatedPanel(panelTitle);
       return;
@@ -1113,6 +1187,8 @@ export function clickOpenChatButton(): boolean {
 // --- Phase 2/3 panel actions: match scoring + interview prep ---
 
 export async function showMatch(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  const epoch = viewEpoch; // a score for a job the user already left stays silent
+  if (!isViewCurrent(epoch)) return;
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在计算匹配度（0-100）…'] });
   try {
     const result = (await backendMatch({
@@ -1137,6 +1213,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
       ...(result.risks.length > 0 ? ['', '🚨 避坑:'] : []),
       ...result.risks.map((r) => `  · ${r}`),
     ];
+    if (!isViewCurrent(epoch)) return; // switched jobs while the LLM ran — no stale paint
     showPanel({
       title: `${panelTitle} — 匹配度`,
       rows,
@@ -1150,6 +1227,7 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
       ],
     });
   } catch (err) {
+    if (!isViewCurrent(epoch)) return; // superseded errors stay silent
     if (isContextInvalidated(err)) {
       contextInvalidatedPanel(panelTitle);
       return;
@@ -1165,6 +1243,8 @@ export async function showMatch(ctx: CapturedContext, panelTitle: string): Promi
 }
 
 export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string): Promise<void> {
+  const epoch = viewEpoch; // prep for a job the user already left stays silent
+  if (!isViewCurrent(epoch)) return;
   showPanel({ state: 'tagging', title: panelTitle, rows: ['正在预测面试题…'] });
   try {
     const result = (await backendInterview({
@@ -1179,12 +1259,14 @@ export async function showInterviewPrep(ctx: CapturedContext, panelTitle: string
       `  建议: ${question.starHint}`,
       '',
     ]);
+    if (!isViewCurrent(epoch)) return; // switched jobs while the LLM ran — no stale paint
     showPanel({
       title: `${panelTitle} — 面试准备`,
       rows,
       actions: [{ label: '返回', onClick: () => showTaggedPanel(ctx, panelTitle) }],
     });
   } catch (err) {
+    if (!isViewCurrent(epoch)) return; // superseded errors stay silent
     if (isContextInvalidated(err)) {
       contextInvalidatedPanel(panelTitle);
       return;
