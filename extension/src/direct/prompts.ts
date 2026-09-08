@@ -257,21 +257,39 @@ export function scrubUnsupportedYears(pitch: string, resume?: string): string {
   return out.replace(/\s{2,}/g, ' ').trim();
 }
 
-/** Trim, strip one pair of wrapping quotes, then truncate at a punctuation
- *  boundary so a pitch never ends mid-sentence. Mirror of core/src/jd/greeting.ts. */
+/** Last index of any of `chars` in `s`, or -1. */
+function lastIndexAny(s: string, chars: string[]): number {
+  let at = -1;
+  for (const ch of chars) {
+    const i = s.lastIndexOf(ch);
+    if (i > at) at = i;
+  }
+  return at;
+}
+
+/** Trim, strip one pair of wrapping quotes, then trim excess length only at a
+ *  CLEAN sentence boundary so a pitch never ends mid-clause (a real reported
+ *  bug: cutting at 120 rewound to a trailing "，" and the greeting read chopped
+ *  mid-sentence). The ~120-char target is a soft goal — a complete greeting
+ *  that slightly overruns it is kept WHOLE; only text running far past it
+ *  (ceiling = 2× target, typically commentary the model appended) is trimmed
+ *  back to the last sentence end. Verbatim twin of core/src/jd/greeting.ts
+ *  normalizePitch — keep in sync. */
 function normalizePitch(text: string, max: number = 120): string {
   let t = text.trim();
   const wrapped = t.match(/^([「『“"''])([\s\S]*?)([」』”"'])$/);
   if (wrapped) t = wrapped[2].trim();
   if (t.length <= max) return t;
 
-  const cut = t.slice(0, max);
-  let at = -1;
-  for (const ch of ['。', '！', '？', '!', '?', '…', '，', ',']) {
-    const i = cut.lastIndexOf(ch);
-    if (i > at) at = i;
-  }
-  return at >= 0 ? t.slice(0, at + 1) : cut;
+  const ceiling = Math.min(t.length, max * 2);
+  const window = t.slice(0, ceiling);
+  // Over target but a complete, terminal-ended pitch up to the ceiling → keep it.
+  if (window === t && /[。！？!?…]$/.test(t)) return t;
+
+  const sentence = lastIndexAny(window, ['。', '！', '？', '!', '?', '…']);
+  if (sentence >= 0) return window.slice(0, sentence + 1);
+  const clause = lastIndexAny(window, ['，', ',', '；', ';']);
+  return clause >= 0 ? window.slice(0, clause + 1) : window;
 }
 
 // --- Match scoring (port of core match.ts) ---

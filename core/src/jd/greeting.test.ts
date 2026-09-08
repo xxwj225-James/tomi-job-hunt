@@ -72,20 +72,40 @@ describe('normalizePitch', () => {
     expect(normalizePitch(`「${under}」`)).toBe(under);
   });
 
-  it('truncates a long pitch at the last punctuation, not mid-word', () => {
-    const long = `${under}${'很期待与你进一步沟通，'.repeat(10)}`;
-    expect(long.length).toBeGreaterThan(120);
-    const pitch = normalizePitch(long);
-    expect(pitch.length).toBeLessThanOrEqual(120);
-    // never ends mid-sentence: the cut char before it is a sentence end or comma
-    expect(pitch.endsWith('吗？') || pitch.endsWith('，') || pitch.endsWith('。')).toBe(true);
-    // and it is a real prefix of the source (nothing invented)
-    expect(long.startsWith(pitch)).toBe(true);
+  it('keeps a slightly-over-limit pitch WHOLE when it already ends a sentence (120 is a soft target, ceiling 2×)', () => {
+    const complete = `${under}${'我主导过全球首款Netflix认证LCD投影系统交付，对音视频流媒体方向积累较深；期待与您深入交流沟通。'.repeat(2)}`;
+    expect(complete.length).toBeGreaterThan(120);
+    expect(complete.length).toBeLessThanOrEqual(240); // within the ceiling
+    // Over target but terminal-ended → never chopped mid-clause.
+    expect(normalizePitch(complete)).toBe(complete);
   });
 
-  it('hard-cuts when there is no punctuation at all', () => {
-    const noPunct = '非常期待有机会和您详细交流我的工作经验和项目实践'.repeat(5);
-    expect(normalizePitch(noPunct)).toBe(noPunct.slice(0, 120));
+  it('rewinds to the last real sentence end instead of a dangling comma (reported bug)', () => {
+    // Model output overran 120 and tailed off after a '，' (no terminal sentence
+    // end anywhere). Old code hard-cut at 120 and rewound to that final comma →
+    // the greeting read chopped mid-clause ("…对咱们这个岗位，").
+    const dangling = `${under}${'同时也在持续深耕相关技术栈、积累更多项目落地实战经验，'.repeat(6)}`;
+    expect(dangling.length).toBeGreaterThan(120);
+    expect(dangling.endsWith('，')).toBe(true);
+    const pitch = normalizePitch(dangling);
+    expect(pitch).toBe(under); // clean rewind to the last real sentence end, tail dropped
+    expect(pitch.endsWith('吗？')).toBe(true);
+  });
+
+  it('rewinds to the last sentence end within the ceiling when a pitch runs far past it', () => {
+    const long = `${under}${'很期待有机会和您深入交流，也希望您能抽空看下我的简历与作品，随时欢迎进一步沟通。'.repeat(10)}`;
+    expect(long.length).toBeGreaterThan(240);
+    const pitch = normalizePitch(long);
+    expect(pitch.length).toBeGreaterThan(120); // prefers sentence completion over a hard 120 cut
+    expect(pitch.length).toBeLessThanOrEqual(240);
+    expect(pitch.endsWith('。')).toBe(true); // ends at a real sentence boundary
+    expect(long.startsWith(pitch)).toBe(true); // real prefix, nothing invented
+  });
+
+  it('hard-cuts at the ceiling when the window holds no punctuation at all', () => {
+    const noPunct = '非常期待有机会和您详细交流我的工作经验和项目实践'.repeat(15);
+    expect(noPunct.length).toBeGreaterThan(240);
+    expect(normalizePitch(noPunct)).toBe(noPunct.slice(0, 240));
   });
 });
 
