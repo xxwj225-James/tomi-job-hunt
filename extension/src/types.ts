@@ -79,6 +79,8 @@ export type WsEvent =
   | { type: 'job/started'; jobId: string }
   | { type: 'job/done'; jobId: string; result: unknown }
   | { type: 'job/error'; jobId: string; message: string }
+  | { type: 'jd/saved'; jobUid: string; tagged: boolean }
+  | { type: 'jd/deleted'; jobUid: string }
   | { type: 'jd/tagged'; jobId: string; jobUid: string; tags: JdTags | null; error?: string };
 
 /**

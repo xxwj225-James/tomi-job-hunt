@@ -2,9 +2,12 @@
  * Local JD store — append-only JSONL files + in-memory index.
  *
  * Zero dependencies, auditable (one record per line), sized for hundreds of
- * JDs. Latest line wins on load, so updates are plain appends. The repository
- * surface is small on purpose: a SQLite backend can swap in behind the same
- * methods if the corpus outgrows this.
+ * JDs. Latest line wins on load, so updates are plain appends; a deletion
+ * appends a tombstone line instead of rewriting the file, so an interrupted
+ * process can never truncate the library. Deleting is not permanent: a later
+ * full record line for the same jobUid (re-browsing the job) wins again.
+ * The repository surface is small on purpose: a SQLite backend can swap in
+ * behind the same methods if the corpus outgrows this.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,6 +16,12 @@ import type { Logger } from '../logger.js';
 
 const JDS_FILE = 'jds.jsonl';
 const REPORTS_FILE = 'reports.jsonl';
+
+/** Deletion marker appended to jds.jsonl — no title/JD payload, just the uid. */
+export interface JdTombstone {
+  jobUid: string;
+  deletedAt: string;
+}
 
 export interface TagSearchFilters {
   techStack?: string[];
@@ -65,6 +74,19 @@ export class JdStore {
     return this.records.get(jobUid);
   }
 
+  /**
+   * Drops a record from the library (the App's "删除"). Reports for the
+   * jobUid are kept — they are the user's own application history and feed the
+   * anonymized community intel aggregates. Returns false when unknown.
+   */
+  remove(jobUid: string): boolean {
+    if (!this.records.delete(jobUid)) return false;
+    const tombstone: JdTombstone = { jobUid, deletedAt: new Date().toISOString() };
+    appendFileSync(this.jdsPath, `${JSON.stringify(tombstone)}\n`, 'utf8');
+    this.log.debug(`store: removed ${jobUid} (${this.records.size} left)`);
+    return true;
+  }
+
   listRecent(limit = 20): JdRecord[] {
     return [...this.records.values()]
       .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
@@ -113,8 +135,10 @@ export class JdStore {
     for (const line of readFileSync(this.jdsPath, 'utf8').split('\n')) {
       if (!line.trim()) continue;
       try {
-        const record = JSON.parse(line) as JdRecord;
-        this.records.set(record.jobUid, record); // latest line wins
+        const parsed = JSON.parse(line) as JdRecord | JdTombstone;
+        // A tombstone removes; a later full record for the same uid re-adds it.
+        if ('deletedAt' in parsed) this.records.delete(parsed.jobUid);
+        else this.records.set(parsed.jobUid, parsed); // latest line wins
       } catch (err) {
         this.log.warn(`store: skipping corrupt line in ${JDS_FILE}: ${(err as Error).message}`);
       }

@@ -94,6 +94,12 @@ function createWindow(): void {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
+      // The float sits behind/over the browser all day while the user browses,
+      // and Chromium throttles timers of hidden and occluded windows by default.
+      // That silently froze the JD 库 poll (reported as "打开 JD 后 agent 没有
+      // 同步"). The push channel now covers the gap, but the poll stays and must
+      // keep running while the window is not focused.
+      backgroundThrottling: false,
     },
   });
 
@@ -216,17 +222,76 @@ function chromiumCandidates(): ExtBrowser[] {
   return list;
 }
 
+/** Where a browser says it loaded TomiHunt from, and whether that is healthy. */
+interface ExtLoad {
+  browser: ExtBrowser;
+  /** Load dir as recorded by the browser. */
+  dir: string;
+  /** 'fixed' = the dir this App keeps up to date; 'elsewhere' = outside it. */
+  where: 'fixed' | 'elsewhere';
+  /** Why the loaded dir cannot work ('', when it is fine). */
+  problem: string;
+}
+
 /**
- * The Chromium that actually has the TomiHunt extension loaded. Unpacked
- * extensions are recorded per-profile in <User Data>/<profile>/Preferences
- * under extensions.settings[id].path — match that against the fixed dir the app
- * copies its bundle into. Lets "打开扩展页" land on the browser the user already
- * loaded the extension in, instead of always their default browser.
+ * Chromium's per-profile extension registry. Modern Chromium keeps
+ * extensions.settings in "Secure Preferences" — "Preferences" carries an empty
+ * settings object (0 entries on Edge/Chrome, verified 2026-09). Reading only
+ * "Preferences" is why the old scan never matched anything, so "打开扩展页"
+ * always fell back to the default browser even with the extension loaded.
  */
-function browserWithExtension(cands: ExtBrowser[]): ExtBrowser | null {
+const PREFS_FILES = ['Secure Preferences', 'Preferences'];
+
+/** Manifest name check, tolerant of the title suffix in "TomiHunt — …". */
+function isTomihuntManifest(raw: unknown): boolean {
+  const name = (raw as { name?: unknown } | null)?.name;
+  return typeof name === 'string' && name.startsWith('TomiHunt');
+}
+
+/** Reads <dir>/manifest.json and says whether it is a TomiHunt bundle. */
+function manifestIsTomihunt(dir: string): boolean {
+  try {
+    return isTomihuntManifest(JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Inspects a dir a browser loaded as an unpacked extension. Returns null when
+ * it is not ours.
+ *
+ * The second path covers our release bundle: it is a wrapper
+ * (install-extension.bat + extension/), so picking the wrapper in
+ * "Load unpacked" yields a dir whose ROOT has no manifest.json — Chromium shows
+ * a broken card for it. Name-matching the nested manifest is what lets us say
+ * that out loud instead of leaving the user with a silently dead extension.
+ */
+function inspectLoadedDir(dir: string): { problem: string } | null {
+  if (manifestIsTomihunt(dir)) return { problem: '' };
+  if (manifestIsTomihunt(join(dir, 'extension'))) {
+    return {
+      problem: `该目录根下没有 manifest.json —— 真正的插件在它的 extension 子目录里，浏览器把这里当成空壳加载（卡片会显示损坏）`,
+    };
+  }
+  return null;
+}
+
+/**
+ * The Chromium that has the TomiHunt extension loaded, with the dir it loaded
+ * it from. A copy in the fixed dir wins (that one is current and gets updated);
+ * otherwise the first TomiHunt loaded from anywhere else is reported, so the UI
+ * can tell the user their live extension is stranded outside App updates.
+ */
+function detectExtensionLoad(cands: ExtBrowser[]): ExtLoad | null {
   if (!FIXED_EXT_DIR || !cands.length) return null;
+  const fixed = FIXED_EXT_DIR.toLowerCase();
+  let stray: ExtLoad | null = null;
   for (const cand of cands) {
-    const userData = join(process.env.LOCALAPPDATA ?? '', cand.kind === 'chrome' ? 'Google\\Chrome\\User Data' : 'Microsoft\\Edge\\User Data');
+    const userData = join(
+      process.env.LOCALAPPDATA ?? '',
+      cand.kind === 'chrome' ? 'Google\\Chrome\\User Data' : 'Microsoft\\Edge\\User Data',
+    );
     if (!existsSync(userData)) continue;
     let profiles: string[];
     try {
@@ -237,21 +302,34 @@ function browserWithExtension(cands: ExtBrowser[]): ExtBrowser | null {
       continue;
     }
     for (const profile of profiles) {
-      const prefs = join(userData, profile, 'Preferences');
-      if (!existsSync(prefs)) continue;
-      try {
-        const json = JSON.parse(readFileSync(prefs, 'utf8')) as { extensions?: { settings?: Record<string, { path?: string }> } };
-        const settings = json.extensions?.settings;
+      for (const file of PREFS_FILES) {
+        const prefs = join(userData, profile, file);
+        if (!existsSync(prefs)) continue;
+        let settings: Record<string, { path?: string; location?: number }> | undefined;
+        try {
+          const json = JSON.parse(readFileSync(prefs, 'utf8')) as {
+            extensions?: { settings?: Record<string, { path?: string; location?: number }> };
+          };
+          settings = json.extensions?.settings;
+        } catch {
+          continue; // locked/partial while the browser is running — try the next
+        }
         if (!settings) continue;
         for (const id of Object.keys(settings)) {
-          if (settings[id]?.path === FIXED_EXT_DIR) return cand;
+          const entry = settings[id];
+          const dir = entry?.path;
+          // location 4 = unpacked. Web-store copies live under
+          // <User Data>/<profile>/Extensions/<id>/<version> — never ours.
+          if (!dir || (entry.location !== undefined && entry.location !== 4)) continue;
+          if (!existsSync(dir)) continue;
+          if (dir.toLowerCase() === fixed) return { browser: cand, dir, where: 'fixed', problem: '' };
+          const info = inspectLoadedDir(dir);
+          if (info && !stray) stray = { browser: cand, dir, where: 'elsewhere', problem: info.problem };
         }
-      } catch {
-        // Locked/partial Preferences file while the browser is running — skip.
       }
     }
   }
-  return null;
+  return stray;
 }
 
 /**
@@ -349,10 +427,16 @@ async function openExtensionsPage(): Promise<void> {
   // A browser that already has the TomiHunt extension loaded wins (so the
   // reload/refresh lands where it actually lives); otherwise the default
   // Chromium engine.
-  const target = browserWithExtension(cands) ?? extensionsTargetBrowser(cands) ?? cands[0];
+  const load = detectExtensionLoad(cands);
+  const target = load?.browser ?? extensionsTargetBrowser(cands) ?? cands[0];
   const url = target.url;
   const label = browserLabel(target);
   clipboard.writeText(url);
+
+  // A TomiHunt loaded from outside the fixed dir keeps working, but no App
+  // update ever reaches it and it holds its OWN storage — the user would sit on
+  // a frozen version forever without noticing. Say so where they will act.
+  const stray = load && load.where === 'elsewhere' ? load : null;
 
   // Open it if it isn't up yet, so there's always a browser to paste into.
   // (The cold launch ignores `url` — Chromium drops it — and lands on a fresh
@@ -361,11 +445,17 @@ async function openExtensionsPage(): Promise<void> {
 
   if (!win || win.isDestroyed()) return;
   await dialog.showMessageBox(win, {
-    type: 'info',
+    type: stray ? 'warning' : 'info',
     buttons: ['知道了'],
     noLink: true,
-    message: `扩展管理页地址已复制 — 请在 ${label} 里粘贴打开`,
+    message: stray ? `检测到插件装在别的目录 — 请在 ${label} 里处理` : `扩展管理页地址已复制 — 请在 ${label} 里粘贴打开`,
     detail:
+      (stray
+        ? `TomiHunt 目前在 ${label} 里是从这个目录加载的：\n\n  ${stray.dir}\n\n` +
+          (stray.problem ? `问题：${stray.problem}\n\n` : '') +
+          `它不在 App 管理的固定目录里，插件更新永远到不了它。请在扩展页移除那张卡片，再从下面的固定目录「加载已解压的扩展程序」：\n\n  ${FIXED_EXT_DIR}\n\n` +
+          `（加载前重开 App，或点「打开插件目录」确认它已就位。）\n\n`
+        : '') +
       `Chrome / Edge 出于安全限制，不允许外部程序直接打开其内部页面，因此无法为你自动跳转。\n\n` +
       `页面地址已在剪贴板：\n\n  ${url}\n\n` +
       `在 ${label} 地址栏按 Ctrl+L 粘贴并回车即可（一次即可）。之后可在该页点开「开发者模式」加载插件，或把此页固定方便以后直接点开。`,
@@ -398,8 +488,18 @@ function registerIpc(): void {
     if (action === 'minimize') win.minimize();
     else if (action === 'close') win.close();
   });
-  // Fixed-dir extension state (copy-on-first-run; see install-guide.ts).
-  ipcMain.handle('ext:info', () => ensureExtension());
+  // Fixed-dir extension state (copy-on-first-run; see install-guide.ts) plus
+  // what the browsers ACTUALLY loaded, so Settings can flag a stranded copy.
+  ipcMain.handle('ext:info', () => {
+    const info = ensureExtension();
+    const load = detectExtensionLoad(chromiumCandidates());
+    return {
+      ...info,
+      load: load
+        ? { browser: browserLabel(load.browser), dir: load.dir, where: load.where, problem: load.problem }
+        : null,
+    };
+  });
 
   ipcMain.on('shell:openExtensions', () => {
     void openExtensionsPage();

@@ -76,6 +76,12 @@ export type WsEvent =
   | { type: 'job/started'; jobId: string }
   | { type: 'job/done'; jobId: string; result: unknown }
   | { type: 'job/error'; jobId: string; message: string }
+  /** A JD record was written to the library — fires on every actual store
+   *  write, tagged or not, so the desktop App's JD 库 list refreshes on push
+   *  instead of waiting for its poll. */
+  | { type: 'jd/saved'; jobUid: string; tagged: boolean }
+  /** A JD was removed from the library (re-browsing the job re-adds it). */
+  | { type: 'jd/deleted'; jobUid: string }
   /** Async JD tagging finished (or failed — tags null, error set). */
   | {
       type: 'jd/tagged';

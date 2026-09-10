@@ -1,11 +1,14 @@
 """Release packaging — standard zip files that Windows Explorer opens natively.
 
-Usage: python scripts/package.py
+Usage: python scripts/package.py   (also the last step of `npm run pack`)
 Output: release/tomihunt-extension.zip (self-installing bundle: extract,
         double-click install-extension.bat)
+        release/tomihunt-extension/    (the SAME bundle left extracted, for
+        people who run install-extension.bat straight from release/)
         release/tomihunt-source.zip (full source for Core mode)
 """
 import os
+import shutil
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,12 +44,26 @@ def make_extension_zip(dist_dir: str, dst: str) -> None:
     print(f'{os.path.basename(dst)}: {os.path.getsize(dst)} bytes')
 
 
+def make_extension_dir(dist_dir: str, dst_dir: str) -> None:
+    """The SAME bundle as make_extension_zip, left extracted.
+
+    The zip and this folder are two views of one payload, and refreshing only
+    the zip is exactly how a stale folder kept reinstalling an old extension
+    (release/tomihunt-extension/ still held the 0.2.0 build that
+    install-extension.bat copies into %LOCALAPPDATA%\\TomiHunt\\extension).
+    """
+    installer = os.path.join(ROOT, 'scripts', 'install-extension.bat')
+    shutil.rmtree(dst_dir, ignore_errors=True)
+    shutil.copytree(dist_dir, os.path.join(dst_dir, 'extension'))
+    shutil.copy2(installer, os.path.join(dst_dir, 'install-extension.bat'))
+    print(f'{os.path.basename(dst_dir)}/: refreshed from extension/dist')
+
+
 def main() -> None:
     os.makedirs(RELEASE, exist_ok=True)
-    make_extension_zip(
-        os.path.join(ROOT, 'extension', 'dist'),
-        os.path.join(RELEASE, 'tomihunt-extension.zip'),
-    )
+    dist = os.path.join(ROOT, 'extension', 'dist')
+    make_extension_zip(dist, os.path.join(RELEASE, 'tomihunt-extension.zip'))
+    make_extension_dir(dist, os.path.join(RELEASE, 'tomihunt-extension'))
     make_zip(ROOT, os.path.join(RELEASE, 'tomihunt-source.zip'))
     print('done')
 

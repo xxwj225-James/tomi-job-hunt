@@ -120,6 +120,40 @@ describe('extractZhipinJdDom', () => {
     const doc = docFrom(`<html><body><div class="job-salary">20K</div></body></html>`);
     expect(extractZhipinJdDom(doc)).toBeNull();
   });
+
+  // Reported 2026-09: one 近硕半导体 JD stored under four different companies
+  // (三棵树 / 宏信健康 / 科大讯飞 / 岩思…). BOSS surrounds the JD with
+  // recommendation cards that reuse the SAME class names we read, and the old
+  // document-wide lookup took the first/longest match anywhere on the page.
+  it('reads every field from the viewed job, never from a recommendation card', () => {
+    const doc = docFrom(`
+      <html><body>
+        <div class="job-detail-box">
+          <div class="job-detail-header">
+            <span class="job-name">研发总监</span>
+            <span class="job-salary">35-50K·13薪</span>
+            <span class="name">上海近硕半导体技术有限公司</span>
+          </div>
+          <div class="job-detail">
+            <div class="job-sec-text">上海近硕半导体技术有限公司是一家深耕半导体产业的科技创新企业。</div>
+          </div>
+        </div>
+        <div class="recommend-list">
+          <div class="job-card-wrapper">
+            <a class="job-name" href="/job_detail/card1.html">研发总监</a>
+            <span class="company-name">三棵树</span>
+            <div class="job-sec-text">
+              三棵树涂料股份有限公司创立于2002年，始终关注人类美好生活和家居健康，致力于打造绿色建材一站式集成系统。
+            </div>
+          </div>
+        </div>
+      </body></html>`);
+    const jd = extractZhipinJdDom(doc);
+    expect(jd?.title).toBe('研发总监');
+    expect(jd?.company).toBe('上海近硕半导体技术有限公司');
+    expect(jd?.requirements).toContain('近硕半导体');
+    expect(jd?.requirements).not.toContain('三棵树');
+  });
 });
 
 describe('attachZhipinSpaWatcher', () => {
@@ -224,6 +258,74 @@ describe('attachZhipinSpaWatcher', () => {
       await vi.advanceTimersByTimeAsync(200);
       expect(imported).toEqual(['岗位A', '岗位B']);
       expect(renderPanel).toHaveBeenCalledTimes(3);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Reported: on the 一览 page (list left, clicked JD on the right) only the
+  // FIRST job of the list ever reached the JD library. The pane carries no
+  // `.job-detail-box` class there, so the old document-wide jid lookup keyed
+  // every job by the same first card link and the watcher never re-adopted.
+  it('imports every job clicked in the split view, not just the first', async () => {
+    vi.useFakeTimers();
+    try {
+      const splitView = (title: string, company: string): string => `
+        <div class="job-list-box">
+          <div class="job-card-wrapper">
+            <a class="job-name" href="/job_detail/首条.html">首条岗位</a>
+            <span class="company-name">首条公司</span>
+          </div>
+        </div>
+        <div class="detail-pane">
+          <div class="job-detail-header">
+            <span class="job-name">${title}</span>
+            <span class="job-company-name">${company}</span>
+          </div>
+          <div class="job-detail"><div class="job-sec-text">${title} 的岗位职责：负责 ${title} 相关研发与管理工作。</div></div>
+        </div>`;
+      document.body.innerHTML = splitView('岗位A', '甲厂');
+      const imported: string[] = [];
+      const silentImport = vi.fn(async (jd: ZhipinJd) => {
+        imported.push(`${jd.company}|${jd.title}`);
+      });
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel: vi.fn() });
+
+      await vi.advanceTimersByTimeAsync(100); // adopt the opened job
+      expect(imported).toEqual(['甲厂|岗位A']);
+
+      document.body.innerHTML = splitView('岗位B', '乙厂'); // click the next row
+      await vi.advanceTimersByTimeAsync(200);
+      expect(imported).toEqual(['甲厂|岗位A', '乙厂|岗位B']);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keys each job by its own scope, not by a recommendation card link', async () => {
+    vi.useFakeTimers();
+    try {
+      // A `job_detail` link from a recommendation card must not become the key:
+      // a shared key makes every later job look like the one already imported,
+      // so the watcher would stop importing anything after the first job.
+      const page = (title: string, company: string): string =>
+        `${jobDetail(title, company)}
+         <div class="recommend-list"><a href="/job_detail/999.html">推荐岗位</a></div>`;
+      document.body.innerHTML = page('岗位A', '甲厂');
+      const imported: string[] = [];
+      const silentImport = vi.fn(async (jd: ZhipinJd) => {
+        imported.push(jd.title);
+      });
+      const stop = attachZhipinSpaWatcher({ pollMs: 100, silentImport, renderPanel: vi.fn() });
+
+      await vi.advanceTimersByTimeAsync(100); // adopt A
+      expect(imported).toEqual(['岗位A']);
+
+      document.body.innerHTML = page('岗位B', '乙厂');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(imported).toEqual(['岗位A', '岗位B']);
       stop();
     } finally {
       vi.useRealTimers();

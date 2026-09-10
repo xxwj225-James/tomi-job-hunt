@@ -59,6 +59,7 @@ async function json(method: string, path: string, body?: unknown, want = 'json')
 
 const get = (p: string): Promise<unknown> => json('GET', p);
 const post = (p: string, b?: unknown): Promise<unknown> => json('POST', p, b);
+const del = (p: string): Promise<unknown> => json('DELETE', p);
 
 export const api = {
   health: (): Promise<Health> => get('/health') as Promise<Health>,
@@ -66,6 +67,9 @@ export const api = {
   // JD store
   listJds: (limit = 50): Promise<{ total: number; records: JdRecord[] }> =>
     get(`/v1/jd?limit=${limit}`) as Promise<{ total: number; records: JdRecord[] }>,
+  /** Removes one JD from the library. Not permanent: re-browsing re-imports it. */
+  removeJd: (jobUid: string): Promise<{ ok: boolean; jobUid: string }> =>
+    del(`/v1/jd/${encodeURIComponent(jobUid)}`) as Promise<{ ok: boolean; jobUid: string }>,
 
   // Generators — resume falls back to the local resume file server-side.
   greeting: (jd: JdParams, feedback?: string, tags?: { techStack?: string[]; summary?: string }): Promise<GreetingResult> =>

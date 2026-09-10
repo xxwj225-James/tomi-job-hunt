@@ -107,15 +107,25 @@ export class AgentRouter {
           this.sessions.upsert(targetId, connectionId, undefined, now);
           this.flush(targetId);
         }
+        // Logged because "agents=1, sessions=0" — a connected extension that
+        // registers no chat session — is otherwise invisible here, and the
+        // console only ever sees the resulting tab-offline timeout.
+        if (msg.sessionIds.length > 0) {
+          this.log.info(`agent: hello re-registered ${msg.sessionIds.length} session(s)`);
+        }
         break;
       }
       case 'session': {
         if (msg.action === 'upsert') {
           this.sessions.upsert(msg.targetId, connectionId, msg.tabId, this.now());
+          this.log.info(
+            `agent: session up ${msg.targetId} (tab ${msg.tabId ?? '-'}, ${this.sessions.size()} total)`,
+          );
           this.flush(msg.targetId);
         } else {
           // Explicit removal — the target is gone; fail whatever is buffered.
           this.sessions.remove(msg.targetId);
+          this.log.info(`agent: session down ${msg.targetId} (${this.sessions.size()} total)`);
           this.failBuffered(msg.targetId, 'tab-closed');
         }
         break;

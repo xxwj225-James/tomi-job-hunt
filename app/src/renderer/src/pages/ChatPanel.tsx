@@ -8,6 +8,8 @@ interface Props {
   jd: JdRecord;
   session?: SessionInfo;
   gatewayConnected: boolean;
+  /** Connected browser extensions — 0 means the plugin itself is not running. */
+  agents: number;
   sendState: SendState | null;
   onSend: (text: string) => void;
 }
@@ -29,7 +31,23 @@ function openPageHint(jd: JdRecord): string {
     : '打开该岗位的 Boss 直聘聊天窗口';
 }
 
-export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: Props): JSX.Element {
+/**
+ * Why a fill can't land right now, in the user's terms.
+ *
+ * "插件未上线/窗口离线超时" merged two unrelated causes: the extension not
+ * running at all, and the extension running fine but this job's chat tab never
+ * having been opened. It is the TAB that registers a session — the background
+ * worker only relays it — so a job whose chat page was never opened has no
+ * session no matter how healthy the plugin is. Measured live: agents=1,
+ * sessions=0, reported to the user as "插件未上线", which sent them looking in
+ * the wrong place entirely.
+ */
+function offlineHint(jd: JdRecord, agents: number): string {
+  if (agents === 0) return '浏览器里的 TomiHunt 插件未连接（请确认插件已启用、浏览器正在运行）';
+  return `插件已连接，但该岗位的聊天窗口还没有打开——请先在浏览器${openPageHint(jd)}`;
+}
+
+export function ChatPanel({ jd, session, gatewayConnected, agents, sendState, onSend }: Props): JSX.Element {
   const uid = jd.jobUid;
   const [pitch, setPitch] = useState(() => pitchCache.get(uid) ?? '');
   const [generating, setGenerating] = useState(false);
@@ -46,6 +64,7 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
   }, [uid, pitch]);
 
   const sessionOn = session?.status === 'online';
+  const offlineWhy = offlineHint(jd, agents);
 
   // After a successful fill the page tells us who the chat is actually with —
   // a posting can rotate recruiters, so the live counterpart overrides the
@@ -122,9 +141,9 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
         </div>
         <span
           className={`st${sessionOn ? '' : ' off'}`}
-          title={sessionOn ? '页面在线，可填入聊天框' : `离线：请先在浏览器${openPageHint(jd)}`}
+          title={sessionOn ? '页面在线，可填入聊天框' : `离线：${offlineWhy}`}
         >
-          {sessionOn ? '● 聊天窗口在线' : '聊天窗口离线'}
+          {sessionOn ? '● 聊天窗口在线' : agents === 0 ? '插件未连接' : '聊天窗口离线'}
         </span>
       </div>
 
@@ -187,14 +206,22 @@ export function ChatPanel({ jd, session, gatewayConnected, sendState, onSend }: 
         >
           {sendState.state === 'ok' ? `${sendState.recruiter ? `正在与 ${sendState.recruiter} 沟通。` : ''}已填入浏览器聊天框并高亮，请在浏览器中确认后发送（插件不会自动发送）。${sendState.domSnippet ? '（' + sendState.domSnippet + '）' : ''}` : ''}
           {sendState.state === 'pending' ? '⏳ 目标页面当前离线，消息已缓冲（约 30s）：请现在到浏览器打开对应页面，会自动填入；超时则失败。' : ''}
-          {sendState.state === 'failed' ? `填入失败：${sendState.reason ? REASON_LABEL[sendState.reason] : sendState.note ?? '未知原因'}` : ''}
+          {sendState.state === 'failed'
+            ? `填入失败：${
+                sendState.reason === 'tab-offline'
+                  ? offlineWhy
+                  : sendState.reason
+                    ? REASON_LABEL[sendState.reason]
+                    : sendState.note ?? '未知原因'
+              }`
+            : ''}
         </div>
       ) : null}
 
       <div className="send-note">
         {sessionOn
           ? '填入后请到浏览器确认内容再发送（插件不会自动发送）。失败原因（页面关闭 / 离线 / 选择器失效）会回显在这里。'
-          : `该 JD 当前离线：请先在浏览器${openPageHint(jd)}，再点「填入聊天框」；消息会缓冲约 30s，期间页面打开即自动填入。`}
+          : `${offlineWhy}，再点「填入聊天框」；消息会缓冲约 30s，期间页面打开即自动填入。`}
       </div>
     </div>
   );

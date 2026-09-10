@@ -15,10 +15,13 @@ import {
   enterJobView,
   generatePitch,
   pickLongText,
+  pickLongTextEl,
   pickText,
+  saveLastJd,
   showMatch,
   showPanel,
 } from './shared.js';
+import { isChallengePage, showChallengePanel } from './challenge.js';
 import type { JdCaptureInput } from '../types.js';
 
 export interface ZhipinJd {
@@ -58,46 +61,100 @@ export function parseWapiDetail(json: unknown): ZhipinJd | null {
   };
 }
 
+/**
+ * Containers holding the VIEWED job's own header + body, narrowest first.
+ *
+ * Every field must be resolved inside one of these. A document-wide lookup
+ * mixed fields from DIFFERENT jobs on the same page: BOSS surrounds the JD
+ * with recommendation/similar-job cards, and those cards use the very same
+ * class names we read (`.job-name`, `.company-name` — see zhipin-list.ts).
+ * That is how one 近硕半导体 JD ended up stored under four different
+ * companies, one of them a card's own truncated label ("…人工...").
+ */
+const DETAIL_CONTAINERS = [
+  '.job-detail-box',
+  '.job-detail-container',
+  '.job-detail-wrapper',
+  '.job-detail-section',
+];
+
+/** Field candidates, in priority order (markup drifts between layouts). */
+const TITLE_SEL = ['.job-detail-header .job-name', '.job-title', '.job-name h1', '.name h1', 'h1'];
+const COMPANY_SEL = [
+  '.job-detail-header .job-company-name',
+  '.job-detail-header .company-name',
+  '.job-detail-header .name',
+  '.company-text',
+  '.company-info .name',
+  '.job-company .name',
+  // Card selectors (and `.boss-name`, an HR *person* on cards) stay last: they
+  // are what leaked a stranger's company into a record.
+  '.company-name',
+  '.boss-name',
+];
+const SALARY_SEL = ['.job-detail-header .job-salary', '.job-salary', '.salary', '.job-title-box .salary'];
+const JD_BODY_SEL = [
+  '.job-detail .job-keyword-list + .job-sec-text',
+  '.job-detail-section .job-sec-text',
+  '.job-sec-text',
+  '.job-description',
+  '.job-detail .text',
+  '.job-sec .text',
+];
+const HR_SEL = ['.job-boss-info h2.name', '.job-boss .name', '.boss-info .name', '.recruiter-name'];
+
+/** Presence-only (no text extraction) — detailScope() runs on every poll tick. */
+const holds = (el: Element, selectors: string[]): boolean => selectors.some((s) => el.querySelector(s));
+
+/**
+ * Container wrapping the shown job, or the whole document (legacy markup).
+ *
+ * Split views — BOSS's 一览 page, list on the left and the opened JD on the
+ * right — carry no container class we can rely on. There the body element
+ * anchors the scope instead: the smallest ancestor holding both the long JD
+ * text and a header IS the detail pane, and the list cards sit outside it.
+ * Without this every card on the page shares one scope and the library only
+ * ever receives the first card of the list.
+ */
+export function detailScope(doc: Document): ParentNode {
+  for (const sel of DETAIL_CONTAINERS) {
+    const el = doc.querySelector(sel);
+    if (el) return el;
+  }
+  const body = pickLongTextEl(doc, JD_BODY_SEL);
+  for (let el = body?.parentElement ?? null; el && el !== doc.body && el !== doc.documentElement; el = el.parentElement) {
+    if (holds(el, TITLE_SEL) && holds(el, COMPANY_SEL)) return el;
+  }
+  return doc;
+}
+
+/** Reads every field from ONE root, so they are all the same job's. */
+function readJd(root: ParentNode): ZhipinJd {
+  const title = pickText(root, TITLE_SEL) || '';
+  const company = pickText(root, COMPANY_SEL) || '';
+  const salaryText = pickText(root, SALARY_SEL) || '';
+  const requirements = pickLongText(root, JD_BODY_SEL) || '';
+  const hrName = pickText(root, HR_SEL) || '';
+  return { title, company, salaryText, requirements, hrName };
+}
+
+/** List-card containers — same classes zhipin-list.ts badges. */
+const LIST_CARD_SEL = '.job-card-wrapper, .job-list-box li, .job-card-body';
+
 /** DOM fallback extraction with current + legacy selector candidates. */
 export function extractZhipinJdDom(doc: Document): ZhipinJd | null {
-  const title =
-    pickText(doc, ['.job-detail-header .job-name', '.job-title', '.job-name h1', '.name h1', 'h1']) || '';
-  const company =
-    pickText(doc, [
-      '.job-detail-header .job-company-name',
-      '.boss-name',
-      '.company-name',
-      '.company-text',
-      '.company-info .name',
-      '.job-company .name',
-    ]) || '';
-  if (!title || !company) return null;
-
-  const salaryText =
-    pickText(doc, [
-      '.job-detail-header .job-salary',
-      '.job-salary',
-      '.salary',
-      '.job-title-box .salary',
-    ]) || '';
-  const requirements =
-    pickLongText(doc, [
-      '.job-detail .job-keyword-list + .job-sec-text',
-      '.job-detail-section .job-sec-text',
-      '.job-sec-text',
-      '.job-description',
-      '.job-detail .text',
-      '.job-sec .text',
-    ]) || '';
-  const hrName =
-    pickText(doc, [
-      '.job-boss-info h2.name',
-      '.job-boss .name',
-      '.boss-info .name',
-      '.recruiter-name',
-    ]) || '';
-
-  return { title, company, salaryText, requirements, hrName };
+  const scope = detailScope(doc);
+  if (scope !== doc) {
+    const scoped = readJd(scope);
+    if (scoped.title && scoped.company) return scoped;
+    // Container found but no header inside it (layout drift) → legacy lookup.
+  }
+  // No job is actually opened: the only long text on the page is a list card's
+  // own snippet (click-through in flight). Filing that would store a card
+  // summary as a JD, so report "nothing here" and let the next tick retry.
+  if (pickLongTextEl(doc, JD_BODY_SEL)?.closest(LIST_CARD_SEL)) return null;
+  const legacy = readJd(doc);
+  return legacy.title && legacy.company ? legacy : null;
 }
 
 // --- API rate limiting (Boss直聘 risk control, learned the hard way) ---
@@ -111,6 +168,25 @@ let lastApiFetchAt = 0;
 const API_MIN_INTERVAL_MS = 15_000;
 const apiCache = new Map<string, ZhipinJd>();
 let apiDisabledForSession = false;
+
+/**
+ * Cross-tab gate for the ONE endpoint we ever call on BOSS.
+ *
+ * `lastApiFetchAt` above is per content-script instance, so N open BOSS tabs
+ * meant N independent 15s windows — the busiest case (many tabs) had the
+ * loosest limit. The service worker owns a single clock instead, shared by
+ * every tab and remembered across SW idle-sleeps; this tab asks for a slot and
+ * goes DOM-only when it is not this tab's turn.
+ */
+async function requestApiSlot(): Promise<boolean> {
+  try {
+    const res = (await chrome.runtime.sendMessage({ type: 'tomi-api-slot' })) as { ok?: boolean } | undefined;
+    return res?.ok === true;
+  } catch {
+    // SW unreachable / extension context tearing down → keep the in-tab limit.
+    return Date.now() - lastApiFetchAt >= API_MIN_INTERVAL_MS;
+  }
+}
 
 /** True when the response looks like a risk-control challenge, not job data. */
 function looksLikeRiskChallenge(json: unknown): boolean {
@@ -139,10 +215,11 @@ async function extractZhipinJdGuarded(doc: Document, allowApi: boolean): Promise
   const cached = apiCache.get(cacheKey);
   if (cached) return cached;
 
-  // Hard rate limit: at most one fetch per API_MIN_INTERVAL_MS.
+  // Hard rate limit: at most one fetch per API_MIN_INTERVAL_MS in this tab, and
+  // at most one per global slot across all tabs (requestApiSlot).
   if (Date.now() - lastApiFetchAt < API_MIN_INTERVAL_MS) return domJd;
-
   if (apiDisabledForSession) return domJd; // challenged earlier — DOM only
+  if (!(await requestApiSlot())) return domJd;
   const jid = jidFromUrl(doc.location?.href ?? '') ?? jidFromDom(doc);
   if (jid) {
     lastApiFetchAt = Date.now();
@@ -186,17 +263,23 @@ function toInput(jd: ZhipinJd): JdCaptureInput {
   };
 }
 
-/** Tries to locate a jid in the DOM when the URL carries none (SPA detail). */
+/**
+ * Tries to locate a jid in the DOM when the URL carries none (SPA detail).
+ * Scoped to the shown job's container: the first `job_detail` link on a BOSS
+ * page normally belongs to a recommendation card, and the jid is what the
+ * guarded API fetch asks for — a card's jid would fetch and analyze a job the
+ * user is not looking at. Document-wide only when there is no container.
+ */
 function jidFromDom(doc: Document): string | null {
+  const root = detailScope(doc);
   for (const attr of ['data-jid', 'data-jobid', 'data-job-id']) {
-    for (const el of doc.querySelectorAll(`[${attr}]`)) {
+    for (const el of root.querySelectorAll(`[${attr}]`)) {
       const value = el.getAttribute(attr);
       if (value && /^\d+$/.test(value)) return value;
     }
   }
-  const link = doc.querySelector('a[href*="job_detail"]');
-  const match = link?.getAttribute('href')?.match(/job_detail\/([^/.?#]+)/);
-  return match?.[1] ?? null;
+  const link = root.querySelector('a[href*="job_detail"]');
+  return link?.getAttribute('href')?.match(/job_detail\/([^/.?#]+)/)?.[1] ?? null;
 }
 
 /**
@@ -279,6 +362,13 @@ export function attachZhipinSpaWatcher(opts: ZhipinSpaWatcherOptions = {}): () =
     const key = keyOf(jd);
     const isSame = key === adoptedKey;
     adoptedKey = key;
+    // Remember the job on screen. 立即沟通 opens /web/geek/chat a moment later,
+    // and that page has no way of telling WHICH job its chat box belongs to
+    // unless the extension left a trace — it registers itself as the app's fill
+    // target from here (shared.ts loadLastJd). captureAndShow does the same on
+    // single-JD pages; this is the SPA path, where the app drives silently and
+    // no panel ever shows.
+    await saveLastJd(toInput(jd));
     if (!isSame) {
       // Supersede any in-flight analysis of the previously-viewed job: its
       // ticks/sockets are disposed and its completions never paint here.
@@ -335,6 +425,17 @@ export function attachZhipinSpaWatcher(opts: ZhipinSpaWatcherOptions = {}): () =
   };
 
   const tick = async (): Promise<void> => {
+    // A verification wall is not a job: stop importing (its text would land in
+    // the JD library as a "job"), stop the API path for this session, and tell
+    // the user once. Checked ahead of the detail marker — the wall can cover a
+    // page whose marker is still in the DOM behind it.
+    if (isChallengePage(document)) {
+      candidateKey = null;
+      candidateStreak = 0;
+      apiDisabledForSession = true;
+      showChallengePanel();
+      return;
+    }
     if (!hasDetailMarker(document)) {
       // no detail open (list / home / company landing) — forget a half-seen job
       candidateKey = null;
@@ -368,6 +469,15 @@ async function main(): Promise<void> {
   // TODO(platform): 待真实 HR 端 URL 确定后填入路径片段（如 '/web/boss/'），当前空列表无行为影响。
   const HR_PATHS: string[] = [];
   if (HR_PATHS.some((p) => window.location.href.includes(p))) return;
+
+  // Risk-control wall: this document is BOSS's verification page, not a job.
+  // Extracting it would deposit a fake JD and the API path must stay shut.
+  if (isChallengePage(document)) {
+    apiDisabledForSession = true;
+    showChallengePanel();
+    return;
+  }
+
   const isDetailUrl = /job_detail\//.test(window.location.href);
 
   if (isDetailUrl) {

@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import { SOURCE_LABEL, type JdRecord, type SessionInfo } from '../lib/types';
-import { fmtDay } from '../lib/markdown';
+import { fmtClock, fmtDay } from '../lib/markdown';
+
+/** Past this, the "更新于" stamp is amber — the poll/push may have stalled. */
+const STALE_MS = 45_000;
 
 interface Props {
   jds: JdRecord[];
@@ -8,10 +12,33 @@ interface Props {
   searchQ: string;
   onSearch: (q: string) => void;
   sessionFor: (jobUid: string) => SessionInfo | undefined;
+  /** Epoch ms of the last successful list load; null before the first one. */
+  syncedAt: number | null;
+  /** Last load failed — the list on screen may be stale. */
+  syncFailed: boolean;
+  /** A user-initiated refresh is in flight (spins the button). */
+  refreshing: boolean;
+  onRefresh: () => void;
+  onDelete: (jobUid: string) => void;
 }
 
-export function JdList({ jds, selUid, onSelect, searchQ, onSearch, sessionFor }: Props): JSX.Element {
+export function JdList({
+  jds,
+  selUid,
+  onSelect,
+  searchQ,
+  onSearch,
+  sessionFor,
+  syncedAt,
+  syncFailed,
+  refreshing,
+  onRefresh,
+  onDelete,
+}: Props): JSX.Element {
   const q = searchQ.trim().toLowerCase();
+  // Two-step delete: hovering a row shows ×, clicking it asks for confirmation
+  // inline (a native dialog would steal focus from this always-on-top float).
+  const [confirmUid, setConfirmUid] = useState<string | null>(null);
   const visible = q
     ? jds.filter((r) =>
         [r.title, r.company, r.requirements, r.salaryText, r.tags?.summary ?? '', (r.tags?.techStack ?? []).join(' ')]
@@ -25,8 +52,36 @@ export function JdList({ jds, selUid, onSelect, searchQ, onSearch, sessionFor }:
     <>
       <div className="side-head">
         <div className="row">
-          <span className="t">JD 库</span>
-          <span className="n">{jds.length} 个</span>
+          <span className="t">
+            JD 库
+            <button
+              className={`side-refresh${refreshing ? ' spinning' : ''}`}
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="立即刷新 JD 库"
+              aria-label="刷新 JD 库"
+            >
+              ⟳
+            </button>
+          </span>
+          <span className="n">
+            {jds.length} 个
+            {/* Liveness stamp — a frozen list used to look identical to a live
+                one. Red = the last load failed, amber = no update in 45s. */}
+            {syncFailed ? (
+              <a className="sync bad" onClick={onRefresh} title="无法读取 JD 库（core 可能未就绪），点击重试">
+                · ⚠ 未同步
+              </a>
+            ) : syncedAt ? (
+              <a
+                className={`sync${Date.now() - syncedAt > STALE_MS ? ' stale' : ''}`}
+                onClick={onRefresh}
+                title="最近一次同步时间，点击立即刷新"
+              >
+                · 更新于 {fmtClock(syncedAt)}
+              </a>
+            ) : null}
+          </span>
         </div>
         <input
           className="side-search"
@@ -62,6 +117,34 @@ export function JdList({ jds, selUid, onSelect, searchQ, onSearch, sessionFor }:
                 {r.tags?.riskFlags?.length ? (
                   <span className="jscore mut">⚠{r.tags.riskFlags.length}</span>
                 ) : null}
+                {confirmUid === r.jobUid ? (
+                  <span className="del-confirm" onClick={(e) => e.stopPropagation()}>
+                    <a
+                      className="yes"
+                      title="确认从 JD 库删除（以后刷到该岗位会重新入库）"
+                      onClick={() => {
+                        setConfirmUid(null);
+                        onDelete(r.jobUid);
+                      }}
+                    >
+                      删除
+                    </a>
+                    <a className="no" onClick={() => setConfirmUid(null)}>
+                      取消
+                    </a>
+                  </span>
+                ) : (
+                  <a
+                    className="jdel"
+                    title="从 JD 库删除"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmUid(r.jobUid);
+                    }}
+                  >
+                    ×
+                  </a>
+                )}
               </div>
               <div className="jsub">
                 {r.company} · {r.salaryText || SOURCE_LABEL[r.source]}

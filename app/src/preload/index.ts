@@ -10,11 +10,20 @@ export interface CoreStateMsg {
   reason?: string;
 }
 
+/** Where a browser actually loaded the extension from (null: none found). */
+export interface ExtLoadInfo {
+  browser: string;
+  dir: string;
+  where: 'fixed' | 'elsewhere';
+  problem: string;
+}
+
 export interface ExtInfo {
   prepared: boolean;
   dir: string;
   version: string;
   changed: boolean;
+  load?: ExtLoadInfo | null;
 }
 
 export interface UpdaterStatus {

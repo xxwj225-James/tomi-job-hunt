@@ -82,10 +82,11 @@ export function stripHidden(node: Element): Element {
   return clone;
 }
 
-/** First non-empty cleaned text across candidate selectors (site markup drifts). */
-export function pickText(doc: Document, selectors: string[]): string {
+/** First non-empty cleaned text across candidate selectors (site markup drifts).
+ *  `root` may be a narrowed container — see zhipin's detailScope(). */
+export function pickText(root: ParentNode, selectors: string[]): string {
   for (const sel of selectors) {
-    const el = doc.querySelector(sel);
+    const el = root.querySelector(sel);
     if (!el) continue;
     const text = stripHidden(el).textContent?.replace(/\s+/g, ' ').trim();
     if (text) return text;
@@ -93,16 +94,28 @@ export function pickText(doc: Document, selectors: string[]): string {
   return '';
 }
 
-/** Picks the longest cleaned text among candidates — JD sections are long-form. */
-export function pickLongText(doc: Document, selectors: string[]): string {
-  let best = '';
+/** The element behind {@link pickLongText} — callers that need to walk up the
+ *  DOM (zhipin's detailScope) must know WHERE the long text came from. */
+export function pickLongTextEl(root: ParentNode, selectors: string[]): Element | null {
+  let best: Element | null = null;
+  let bestLen = 0;
   for (const sel of selectors) {
-    for (const el of doc.querySelectorAll(sel)) {
+    for (const el of root.querySelectorAll(sel)) {
       const text = stripHidden(el).textContent?.replace(/\s+/g, ' ').trim() ?? '';
-      if (text.length > best.length) best = text;
+      if (text.length > bestLen) {
+        bestLen = text.length;
+        best = el;
+      }
     }
   }
   return best;
+}
+
+/** Picks the longest cleaned text among candidates — JD sections are long-form.
+ *  `root` may be a narrowed container — see zhipin's detailScope(). */
+export function pickLongText(root: ParentNode, selectors: string[]): string {
+  const el = pickLongTextEl(root, selectors);
+  return el ? (stripHidden(el).textContent?.replace(/\s+/g, ' ').trim() ?? '') : '';
 }
 
 /**
@@ -300,20 +313,36 @@ export function observeChatMessages(onIncoming: (text: string) => void): () => v
 
 const LAST_JD_KEY = 'tomihunt-last-jd';
 
-
+/** The last JD shown in this browser session, and when it was shown. */
+export interface LastJd {
+  jd: JdCaptureInput;
+  at: number;
+}
 
 export async function saveLastJd(jd: JdCaptureInput): Promise<void> {
   try {
-    await chrome.storage.session.set({ [LAST_JD_KEY]: jd });
+    await chrome.storage.session.set({ [LAST_JD_KEY]: { jd, at: Date.now() } satisfies LastJd });
   } catch {
     // session storage unavailable — reply falls back to generic context
   }
 }
 
-async function loadLastJd(): Promise<JdCaptureInput | null> {
+/**
+ * Reads the last-shown JD with its timestamp. The timestamp is what lets a chat
+ * page decide whether "the JD the user was just looking at" is the conversation
+ * it is showing (立即沟通 navigates within seconds) or a stale leftover.
+ *
+ * Tolerates the pre-timestamp plain-JD shape (a browser session that started
+ * before this build): reported as `at: 0`, i.e. permanently stale, so it can
+ * serve smart-reply context but never identity a chat session.
+ */
+export async function loadLastJd(): Promise<LastJd | null> {
   try {
     const data = await chrome.storage.session.get(LAST_JD_KEY);
-    return (data[LAST_JD_KEY] as JdCaptureInput | undefined) ?? null;
+    const raw = data[LAST_JD_KEY] as (LastJd & Partial<JdCaptureInput>) | undefined;
+    if (!raw) return null;
+    if (raw.jd) return raw as LastJd;
+    return { jd: raw as JdCaptureInput, at: 0 };
   } catch {
     return null;
   }
@@ -368,7 +397,7 @@ export async function handleIncomingMessage(text: string): Promise<void> {
   lastReplyAt = now;
 
   replyHistory.push({ speaker: 'hr', content: text });
-  const jd = await loadLastJd();
+  const jd = (await loadLastJd())?.jd ?? null;
   const resume = await loadResume();
   try {
     const { reply } = await backendReply({

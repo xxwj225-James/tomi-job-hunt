@@ -55,6 +55,40 @@ describe('JdStore', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('removes a record via a tombstone that survives a reload', () => {
+    const dir = tmpDir();
+    const store = new JdStore(dir, silentLog);
+    store.save(makeRecord('A公司', '后端'));
+    store.save(makeRecord('B公司', '前端'));
+
+    expect(store.remove('A公司-后端')).toBe(true);
+    expect(store.remove('A公司-后端')).toBe(false); // already gone
+    expect(store.size).toBe(1);
+    expect(store.findByUid('A公司-后端')).toBeUndefined();
+    expect(store.listRecent(10).map((r) => r.jobUid)).toEqual(['B公司-前端']);
+
+    const reloaded = new JdStore(dir, silentLog); // tombstone line wins on load
+    expect(reloaded.size).toBe(1);
+    expect(reloaded.findByUid('A公司-后端')).toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps reports after a removal, and re-adding the JD works (browse again)', () => {
+    const dir = tmpDir();
+    const store = new JdStore(dir, silentLog);
+    store.save(makeRecord('A公司', '后端'));
+    store.addReport('A公司-后端', { type: 'unpaid_ot' });
+    store.remove('A公司-后端');
+    expect(store.getReports('A公司-后端')).toHaveLength(1); // history kept
+
+    // Re-browsing the job appends a fresh record after the tombstone → it wins.
+    store.save(makeRecord('A公司', '后端'));
+    expect(store.findByUid('A公司-后端')).toBeDefined();
+    const reloaded = new JdStore(dir, silentLog);
+    expect(reloaded.findByUid('A公司-后端')).toBeDefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('stores and reloads reports', () => {
     const dir = tmpDir();
     const store = new JdStore(dir, silentLog);

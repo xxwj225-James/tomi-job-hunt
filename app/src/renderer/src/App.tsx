@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, setApiBase } from './lib/api';
 import { GatewayClient, type GatewaySnapshot } from './lib/gateway';
+import { JdEvents } from './lib/jd-events';
 import { REASON_LABEL, type Health, type JdRecord, type SendState } from './lib/types';
 import { WindowFrame } from './components/WindowFrame';
 import { JdList } from './pages/JdList';
@@ -37,6 +38,13 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [gatewaySnap, setGatewaySnap] = useState<GatewaySnapshot>(emptySnap);
   const [sendStates, setSendStates] = useState<Record<string, SendState>>({});
+  /** Last successful JD list load — shown in the side head so a frozen list is
+   *  visible instead of silently indistinguishable from an empty one. */
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const [syncFailed, setSyncFailed] = useState(false);
+  /** True only while a USER-initiated refresh runs (the background poll must not
+   *  flash the button). */
+  const [refreshing, setRefreshing] = useState(false);
 
   const gatewayRef = useRef<GatewayClient | null>(null);
   const baseRef = useRef<string | null>(null);
@@ -62,12 +70,17 @@ export default function App(): JSX.Element {
     try {
       const { records } = await api.listJds(60);
       setJds(records);
+      setSyncedAt(Date.now());
+      setSyncFailed(false);
       setSelUid((prev) => {
         if (prev && records.some((r) => r.jobUid === prev)) return prev;
         return records[0]?.jobUid ?? null;
       });
     } catch {
-      /* core busy */
+      // Keep the last good list (a transient core restart shouldn't blank the
+      // UI) but SAY so — swallowing the error silently is how a stalled list
+      // stayed indistinguishable from a healthy one.
+      setSyncFailed(true);
     }
   }, []);
 
@@ -98,6 +111,8 @@ export default function App(): JSX.Element {
 
     if (!base) {
       setJds([]);
+      setSyncedAt(null);
+      setSyncFailed(false);
       return undefined;
     }
 
@@ -111,9 +126,43 @@ export default function App(): JSX.Element {
     gw._unsub = gw.onSnapshot((snap) => setGatewaySnap(snap));
     gw.connect();
 
+    // Push channel: core announces every JD library write, so a new job shows up
+    // in ~1s instead of up to 15s — and, unlike a timer, this survives window
+    // throttling (see lib/jd-events.ts). Debounced: one capture can emit
+    // jd/saved and then jd/tagged moments later.
+    let pushTimer: number | null = null;
+    const scheduleRefresh = (): void => {
+      if (pushTimer !== null) window.clearTimeout(pushTimer);
+      pushTimer = window.setTimeout(() => {
+        pushTimer = null;
+        void loadJds();
+        void refreshHealth();
+      }, 300);
+    };
+    const events = new JdEvents(base);
+    const unsubJd = events.onJd(scheduleRefresh);
+    events.connect();
+
+    // Belt and braces: whenever the user actually looks at the window, reconcile
+    // immediately (a throttled poll may have missed minutes of updates).
+    const onFocus = (): void => {
+      void loadJds();
+      void refreshHealth();
+    };
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') onFocus();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       window.clearInterval(healthTimer);
       window.clearInterval(jdTimer);
+      if (pushTimer !== null) window.clearTimeout(pushTimer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      unsubJd();
+      events.close();
       gw._unsub?.();
       gw.close();
       if (gatewayRef.current === gw) gatewayRef.current = null;
@@ -138,6 +187,31 @@ export default function App(): JSX.Element {
   const sessionFor = useCallback(
     (jobUid: string) => gatewaySnap.sessions.find((s) => s.targetId === `jd:${jobUid}`),
     [gatewaySnap.sessions],
+  );
+
+  const onRefresh = useCallback((): void => {
+    setRefreshing(true);
+    void Promise.all([loadJds(), refreshHealth()]).finally(() => setRefreshing(false));
+  }, [loadJds, refreshHealth]);
+
+  /** Drop one JD from the library. Optimistically removes the row (and moves the
+   *  selection to its neighbour) before reconciling with core. Not permanent:
+   *  browsing that job again re-imports it. */
+  const handleDelete = useCallback(
+    async (jobUid: string): Promise<void> => {
+      const at = jds.findIndex((r) => r.jobUid === jobUid);
+      const nextUid = jds[at + 1]?.jobUid ?? jds[at - 1]?.jobUid ?? null;
+      try {
+        await api.removeJd(jobUid);
+      } catch {
+        void loadJds(); // already gone / core busy — take the server's word
+        return;
+      }
+      setJds((prev) => prev.filter((r) => r.jobUid !== jobUid));
+      setSelUid((prev) => (prev === jobUid ? nextUid : prev));
+      void loadJds(); // refresh the count + anything else that changed
+    },
+    [jds, loadJds],
   );
 
   const selected = jds.find((r) => r.jobUid === selUid) ?? null;
@@ -192,6 +266,11 @@ export default function App(): JSX.Element {
             searchQ={q}
             onSearch={setQ}
             sessionFor={sessionFor}
+            syncedAt={syncedAt}
+            syncFailed={syncFailed}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            onDelete={handleDelete}
           />
         </aside>
 
@@ -233,6 +312,7 @@ export default function App(): JSX.Element {
                   jd={selected}
                   session={sessionFor(selected.jobUid)}
                   gatewayConnected={gatewaySnap.connected}
+                  agents={gatewaySnap.agents}
                   sendState={currentSend}
                   onSend={(text) => void handleSend(text)}
                 />

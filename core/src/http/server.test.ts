@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe('POST /v1/jd/capture — tag:false silent 库 import (BOSS SPA browse)', () => {
-  it('stores the JD without tagging: 200 {jobUid}, no queue job, no WS events, no tag field', async () => {
+  it('stores the JD without tagging: 200 {jobUid}, no queue job, only a jd/saved event, no tag field', async () => {
     const { app, store, dataDir, broadcast, queueRun, usageCount } = track(makeHarness());
     const res = await app.request('/v1/jd/capture', {
       method: 'POST',
@@ -98,13 +98,15 @@ describe('POST /v1/jd/capture — tag:false silent 库 import (BOSS SPA browse)'
     expect(JSON.stringify(record)).not.toContain('"tag"'); // transport flag stripped
 
     expect(queueRun).not.toHaveBeenCalled();
-    expect(broadcast).not.toHaveBeenCalled();
+    // The library changed → announce it so the desktop App refreshes on push.
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: 'jd/saved', jobUid: body.jobUid, tagged: false });
     expect(usageCount).toHaveBeenCalledTimes(1);
     expect(jsonLines(dataDir)).toHaveLength(1);
   });
 
   it('skips the append when a tagged record for the same jobUid already exists', async () => {
-    const { app, store, dataDir, queueRun } = track(makeHarness());
+    const { app, store, dataDir, broadcast, queueRun } = track(makeHarness());
     const first = await app.request('/v1/jd/capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -126,6 +128,7 @@ describe('POST /v1/jd/capture — tag:false silent 库 import (BOSS SPA browse)'
     expect(jsonLines(dataDir)).toHaveLength(2); // untagged line + tagged line
 
     // Re-browsing the SAME job (tag:false) must NOT append a third line.
+    broadcast.mockClear();
     const again = await app.request('/v1/jd/capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,11 +138,46 @@ describe('POST /v1/jd/capture — tag:false silent 库 import (BOSS SPA browse)'
     expect(jsonLines(dataDir)).toHaveLength(2);
     expect(store.findByUid(jobUid)?.tags).toBeDefined();
     expect(queueRun).not.toHaveBeenCalled();
+    // Nothing was written → no jd/saved event either (no phantom refresh).
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /v1/jd/:jobUid — remove one JD from the library', () => {
+  it('drops the record, broadcasts jd/deleted and keeps its reports', async () => {
+    const { app, store, broadcast } = track(makeHarness());
+    const captured = await app.request('/v1/jd/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...JD_BODY, tag: false }),
+    });
+    const { jobUid } = (await captured.json()) as { jobUid: string };
+    store.addReport(jobUid, { type: 'unpaid_ot' });
+    broadcast.mockClear();
+
+    const res = await app.request(`/v1/jd/${jobUid}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as unknown).toEqual({ ok: true, jobUid });
+    expect(store.findByUid(jobUid)).toBeUndefined();
+    expect(store.getReports(jobUid)).toHaveLength(1); // application history kept
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: 'jd/deleted', jobUid });
+
+    // The record is gone from the listing endpoint too.
+    const listed = (await (await app.request('/v1/jd?limit=10')).json()) as { total: number };
+    expect(listed.total).toBe(0);
+  });
+
+  it('404s on an unknown jobUid and broadcasts nothing', async () => {
+    const { app, broadcast } = track(makeHarness());
+    const res = await app.request('/v1/jd/nope', { method: 'DELETE' });
+    expect(res.status).toBe(404);
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });
 
 describe('POST /v1/jd/capture — default tag:true stays unchanged', () => {
-  it('returns 202 with taggingJobId, queues the tagging job and broadcasts job/queued', async () => {
+  it('returns 202 with taggingJobId, queues the tagging job and broadcasts jd/saved + job/queued', async () => {
     const { app, store, broadcast, queueRun, usageCount } = track(makeHarness());
     const res = await app.request('/v1/jd/capture', {
       method: 'POST',
@@ -153,6 +191,7 @@ describe('POST /v1/jd/capture — default tag:true stays unchanged', () => {
 
     expect(store.findByUid(body.jobUid)?.title).toBe(JD_BODY.title);
     expect(queueRun).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: 'jd/saved', jobUid: body.jobUid, tagged: true });
     expect(broadcast).toHaveBeenCalledWith({ type: 'job/queued', jobId: body.taggingJobId });
     expect(usageCount).toHaveBeenCalledTimes(1);
   });

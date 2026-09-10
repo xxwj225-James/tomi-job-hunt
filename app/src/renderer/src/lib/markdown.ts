@@ -78,6 +78,14 @@ export function fmtDay(iso: string): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** Wall-clock HH:MM:SS for "last synced" labels (local time, 24h). */
+export function fmtClock(ms: number): string {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export function zhCount(s: string): number {
   // Display heuristic for a "字" budget: CJK chars weigh 1, latin/digits 0.5,
   // punctuation 0.4. `warn` threshold in the UI is widened to absorb this.

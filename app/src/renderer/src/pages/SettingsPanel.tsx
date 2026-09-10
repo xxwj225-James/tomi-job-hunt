@@ -350,6 +350,16 @@ export function SettingsPanel({ base, onClose, onConfigSaved }: Props): JSX.Elem
             <div className="section-title">浏览器插件（聊天框填入器）</div>
             {ext?.prepared ? (
               <>
+                {ext.load && (ext.load.where === 'elsewhere' || ext.load.problem) && (
+                  <div className="tip" style={{ marginBottom: 8 }}>
+                    ⚠️ {ext.load.browser} 里的插件是从<strong>别的目录</strong>加载的：
+                    <br />
+                    <code className="edb-path">{ext.load.dir}</code>
+                    <br />
+                    {ext.load.problem ? `${ext.load.problem}。` : ''}
+                    它不在 App 管理的固定目录里，App 更新永远覆盖不到它（会一直停在旧版本，而且和固定目录里的实例各存各的数据）。请在扩展页移除那张卡片，再从下面的固定目录「加载已解压的扩展程序」。
+                  </div>
+                )}
                 <div className="set-note">
                   App 把话术填入浏览器的聊天框并高亮，由你在页面确认后手动发送——插件不会自动发送。
                   插件已就位（v{ext.version}），只需在浏览器手动加载这一次；App 更新会原地覆盖下方目录，扩展页若提示变化点 🔄 刷新即可（浏览器不允许外部程序静默安装插件）。

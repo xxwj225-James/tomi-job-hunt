@@ -6,6 +6,7 @@
  *   POST /v1/jd/capture         store a JD, tag it asynchronously (202)
  *   POST /v1/jd/tag             tag a JD synchronously (manual/debug)
  *   GET  /v1/jd                 recent JD records
+ *   DELETE /v1/jd/:jobUid       remove one JD from the library
  *   GET  /v1/jd/search          tag-based coarse filter
  *   GET  /v1/jd/:jobUid         one record + its reports
  *   POST /v1/jd/:jobUid/report  add a sanitized structured report
@@ -252,18 +253,24 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     const record: JdRecord = { ...input, jobUid, capturedAt: new Date().toISOString() };
 
     // Silent 库 import (tag:false — BOSS SPA browsing deposits the viewed JD).
-    // Store WITHOUT tagging and return: no queue job, no WS events, no LLM cost.
+    // Store WITHOUT tagging and return: no queue job, no LLM cost. Only a
+    // 'jd/saved' event goes out so the desktop App's list can refresh on push.
     // Skip the append when a richer tagged record for this jobUid already exists
-    // so jds.jsonl doesn't grow on repeated browse-imports of one job. The
-    // tag:true path below stays byte-identical to the pre-change behavior.
+    // so jds.jsonl doesn't grow on repeated browse-imports of one job (nothing
+    // was written → nothing to announce). The tag:true path below stays
+    // byte-identical to the pre-change behavior.
     if (!tag) {
-      if (!deps.store.findByUid(jobUid)?.tags) deps.store.save(record);
+      if (!deps.store.findByUid(jobUid)?.tags) {
+        deps.store.save(record);
+        deps.ws.broadcast({ type: 'jd/saved', jobUid, tagged: false });
+      }
       deps.usage.count('jd_capture');
       deps.log.info(`jd: captured (untagged import) ${jobUid} (${input.company} — ${input.title})`);
       return c.json({ jobUid }, 200);
     }
 
     deps.store.save(record);
+    deps.ws.broadcast({ type: 'jd/saved', jobUid, tagged: true });
     deps.usage.count('jd_capture');
     deps.log.info(`jd: captured ${jobUid} (${input.company} — ${input.title})`);
 
@@ -333,6 +340,17 @@ export function registerRoutes(app: Hono, deps: RouteDeps): void {
     const record = deps.store.findByUid(c.req.param('jobUid'));
     if (!record) return c.json({ error: 'Not found' }, 404);
     return c.json({ record, reports: deps.store.getReports(record.jobUid) });
+  });
+
+  // Remove one JD from the library (the App's 删除). The jobUid's reports are
+  // kept, and the deletion is not permanent: browsing the job again re-imports
+  // it. Broadcast so every open list refreshes, not just the caller's.
+  app.delete('/v1/jd/:jobUid', (c) => {
+    const jobUid = c.req.param('jobUid');
+    if (!deps.store.remove(jobUid)) return c.json({ error: 'Not found' }, 404);
+    deps.ws.broadcast({ type: 'jd/deleted', jobUid });
+    deps.log.info(`jd: deleted ${jobUid}`);
+    return c.json({ ok: true, jobUid });
   });
 
   app.post('/v1/jd/:jobUid/report', async (c) => {

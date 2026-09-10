@@ -10,6 +10,7 @@
  */
 import { CORE_BASE, getCoreBase } from '../core-client.js';
 import { client, showPanel } from './shared.js';
+import { isChallengePage, showChallengePanel } from './challenge.js';
 import type { JdCaptureInput } from '../types.js';
 
 const RISK_KEYWORDS = ['外包', '驻场', '人力外包', '劳务派遣', '单休', '大小周', '试用期不交社保', '996'];
@@ -60,58 +61,107 @@ function badge(text: string, bg: string): HTMLSpanElement {
   return span;
 }
 
-function applyHardFilters(cards: ListCard[]): void {
-  let filtered = 0;
-  for (const card of cards) {
-    const text = `${card.title} ${card.company} ${card.salaryText} ${card.brief}`;
-    const hit = RISK_KEYWORDS.find((kw) => text.includes(kw));
-    if (hit) {
-      const html = card.el as HTMLElement;
-      html.style.opacity = '0.35';
-      html.style.filter = 'grayscale(0.8)';
-      html.style.position = 'relative';
-      html.appendChild(badge(`TomiHunt 降噪: ${hit}`, '#8a8f98'));
-      filtered += 1;
-    }
-  }
-  if (filtered > 0) {
-    showPanel({
-      title: 'TomiHunt 列表页降噪',
-      rows: [`已降噪 ${filtered} 个风险岗位卡片（外包/单休/驻场等规则过滤）。`, '悬停任意卡片点 🤖 可 AI 打分。'],
-      actions: [{ label: '知道了', onClick: () => undefined }],
-    });
-  }
-}
+/** Marks a card already greyed + badged (indexed cards only). */
+const FILTERED_ATTR = 'data-tomihunt-filtered';
 
-function injectScoreButtons(cards: ListCard[]): void {
+/**
+ * Greys out and badges risky cards, once per card. Returns the CUMULATIVE
+ * number of flagged cards.
+ *
+ * The once-per-card part matters: the tick re-scans every 5s, and this used to
+ * append a fresh badge (and re-pop the panel) on every pass — a card quickly
+ * carried dozens of stacked badges, and the page saw a DOM-mutation storm for
+ * as long as 2.5 minutes. Extra injected nodes are also the most script-like
+ * thing we do on a page BOSS is actively risk-scoring.
+ */
+export function applyHardFilters(cards: ListCard[]): number {
+  let flagged = 0;
   for (const card of cards) {
     const html = card.el as HTMLElement;
-    if (html.dataset.tomihuntScored === '1') continue;
-    const btn = document.createElement('button');
-    btn.textContent = '🤖';
-    btn.title = 'TomiHunt AI 打分';
-    Object.assign(btn.style, {
-      position: 'absolute',
-      bottom: '8px',
-      right: '8px',
-      zIndex: '9999',
-      width: '28px',
-      height: '28px',
-      borderRadius: '50%',
-      border: '0',
-      cursor: 'pointer',
-      fontSize: '14px',
-      background: 'linear-gradient(135deg, #4f7cff, #6a5cff)',
-      boxShadow: '0 2px 8px rgba(80,90,220,.35)',
-    });
-    btn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      void scoreCard(card, btn);
-    };
+    if (html.getAttribute(FILTERED_ATTR) === '1') {
+      flagged += 1;
+      continue;
+    }
+    const text = `${card.title} ${card.company} ${card.salaryText} ${card.brief}`;
+    const hit = RISK_KEYWORDS.find((kw) => text.includes(kw));
+    if (!hit) continue;
+    html.setAttribute(FILTERED_ATTR, '1');
+    html.style.opacity = '0.35';
+    html.style.filter = 'grayscale(0.8)';
     html.style.position = 'relative';
-    html.appendChild(btn);
+    html.appendChild(badge(`TomiHunt 降噪: ${hit}`, '#8a8f98'));
+    flagged += 1;
   }
+  return flagged;
+}
+
+const HOVER_BTN_ATTR = 'data-tomihunt-scorer';
+
+/**
+ * Injects the 🤖 scoring button on HOVER, and only then.
+ *
+ * It used to be injected into every card on every 5s scan, which made the
+ * extension the single largest source of added DOM on a page BOSS risk-scores
+ * (and left a button on every card for the whole session). Now a card gains
+ * exactly one node while the pointer is on it, and loses it on mouseout.
+ */
+export function attachScoreHover(doc: Document = document): void {
+  const cardOf = (target: EventTarget | null): HTMLElement | null => {
+    const el = target instanceof Element ? target.closest(CARD_SELECTORS.join(',')) : null;
+    return el instanceof HTMLElement ? el : null;
+  };
+
+  doc.addEventListener(
+    'mouseover',
+    (e) => {
+      const html = cardOf(e.target);
+      if (!html || html.querySelector(`[${HOVER_BTN_ATTR}]`)) return;
+      if (html.getAttribute('data-tomihunt-scored') === '1') return; // already scored
+      const card = extractCard(html);
+      if (!card) return;
+      html.appendChild(makeScoreButton(card, html));
+    },
+    true,
+  );
+
+  doc.addEventListener(
+    'mouseout',
+    (e) => {
+      const html = cardOf(e.target);
+      // Only when the pointer left the card entirely (not card → child).
+      if (!html || (e.relatedTarget instanceof Node && html.contains(e.relatedTarget))) return;
+      html.querySelector(`[${HOVER_BTN_ATTR}]`)?.remove();
+    },
+    true,
+  );
+}
+
+function makeScoreButton(card: ListCard, host: HTMLElement): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = '🤖';
+  btn.title = 'TomiHunt AI 打分';
+  btn.setAttribute(HOVER_BTN_ATTR, '1');
+  Object.assign(btn.style, {
+    position: 'absolute',
+    bottom: '8px',
+    right: '8px',
+    zIndex: '9999',
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    border: '0',
+    cursor: 'pointer',
+    fontSize: '14px',
+    background: 'linear-gradient(135deg, #4f7cff, #6a5cff)',
+    boxShadow: '0 2px 8px rgba(80,90,220,.35)',
+  });
+  btn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void scoreCard(card, btn);
+  };
+  host.style.position = 'relative';
+  return btn;
 }
 
 async function scoreCard(card: ListCard, btn: HTMLButtonElement): Promise<void> {
@@ -168,18 +218,38 @@ function collectCards(doc: Document): ListCard[] {
   return cards;
 }
 
-function main(): void {
+export function main(): void {
+  // A verification wall is not a job list: nothing here applies, and injecting
+  // into a page BOSS has flagged is the worst possible time to do it.
+  if (isChallengePage(document)) {
+    showChallengePanel();
+    return;
+  }
   const cards = collectCards(document);
   if (cards.length === 0) return; // not a list page / SPA not rendered yet
-  applyHardFilters(cards);
-  injectScoreButtons(cards);
+  let reported = 0;
+  // Only speak up when the flagged count GROWS — the panel used to re-pop on
+  // every 5s tick, for as long as any risky card stayed on screen.
+  const announce = (flagged: number): void => {
+    if (flagged <= reported) return;
+    reported = flagged;
+    showPanel({
+      title: 'TomiHunt 列表页降噪',
+      rows: [
+        `已降噪 ${flagged} 个风险岗位卡片（外包/单休/驻场等规则过滤）。`,
+        '鼠标移到任意卡片上，点 🤖 可 AI 打分。',
+      ],
+      actions: [{ label: '知道了', onClick: () => undefined }],
+    });
+  };
+  attachScoreHover(document);
+  announce(applyHardFilters(cards));
   // SPA infinite-scroll appends cards — rescan periodically
   let ticks = 0;
   const timer = setInterval(() => {
     ticks += 1;
     const fresh = collectCards(document);
-    applyHardFilters(fresh);
-    injectScoreButtons(fresh);
+    announce(applyHardFilters(fresh));
     if (ticks > 30) clearInterval(timer); // stop after ~2.5 min
   }, 5000);
   void client;

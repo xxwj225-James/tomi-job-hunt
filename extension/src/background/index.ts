@@ -18,6 +18,7 @@ import {
 } from './sessions.js';
 import { handleDispatch } from './dispatch.js';
 import { startHeartbeat } from './heartbeat.js';
+import { installApiGate } from './api-gate.js';
 
 function boot(): void {
   onMessage((msg) => {
@@ -27,6 +28,7 @@ function boot(): void {
 
   installMessageListener();
   installTabListeners();
+  installApiGate();
   setOpenHandler(() => sendHello(listSessionIds()));
   startHeartbeat();
 

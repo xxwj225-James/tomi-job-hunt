@@ -8,6 +8,12 @@
  *                           (prod deps only — the two optional @anthropic-ai
  *                            SDKs (~300MB) are intentionally excluded)
  *   5. electron-builder    → release/TomiHuntSetup-<version>.exe + latest.yml
+ *   6. package.py          → release/tomihunt-extension.zip + the same bundle
+ *                            extracted in release/tomihunt-extension/ (what
+ *                            install-extension.bat copies from) + source zip.
+ *                            Zips used to be a manual second command, which is
+ *                            how a manual run reinstalled a months-old 0.2.0
+ *                            extension over a fresh one.
  *
  * The staged core is resolved by extraResources in app/electron-builder.yml
  * into resources/core, which core-host.ts forks with ELECTRON_RUN_AS_NODE on a
@@ -41,16 +47,16 @@ function step(msg) {
   console.log(`\n[pack] ── ${msg}`);
 }
 
-step('1/5 build core (dist)');
+step('1/6 build core (dist)');
 run(npmCmd, ['run', 'build', '-w', 'core'], ROOT);
 
-step('2/5 build extension (dist)');
+step('2/6 build extension (dist)');
 run(npmCmd, ['run', 'build', '-w', 'extension'], ROOT);
 
-step('3/5 build app (out)');
+step('3/6 build app (out)');
 run(npmCmd, ['run', 'build', '-w', 'app'], ROOT);
 
-step('4/5 stage core payload (prod deps only)');
+step('4/6 stage core payload (prod deps only)');
 rmSync(STAGE, { recursive: true, force: true });
 mkdirSync(STAGE, { recursive: true });
 
@@ -107,7 +113,7 @@ try {
   rmSync(depsDir, { recursive: true, force: true });
 }
 
-step('5/5 electron-builder (win nsis)');
+step('5/6 electron-builder (win nsis)');
 try {
   // projectDir = app/ (config discovery + relative files/extraResources paths).
   run(bin('electron-builder'), ['--win', 'nsis'], join(ROOT, 'app'));
@@ -116,4 +122,16 @@ try {
   rmSync(join(ROOT, '.pack-stage'), { recursive: true, force: true });
 }
 
-console.log('\n[pack] done — artifacts in release/ (TomiHuntSetup-<version>.exe + latest.yml + .blockmap)');
+step('6/6 package zips (install-extension.bat bundle + source)');
+const py = process.platform === 'win32' ? 'python' : 'python3';
+const zipRes = spawnSync(py, [join('scripts', 'package.py')], { cwd: ROOT, stdio: 'inherit' });
+if (zipRes.error) {
+  // Non-fatal: the installer above is the primary artifact, but say so loudly —
+  // a stale release/*.zip is what reinstalls an old extension over a new one.
+  console.warn(`[pack] skipped zips (${py} not runnable): run "python scripts/package.py" manually`);
+} else if (zipRes.status !== 0) {
+  console.error(`\n[pack] python scripts/package.py exited ${zipRes.status}`);
+  process.exit(zipRes.status ?? 1);
+}
+
+console.log('\n[pack] done — artifacts in release/ (TomiHuntSetup-<version>.exe + latest.yml + .blockmap + extension/source zips)');
